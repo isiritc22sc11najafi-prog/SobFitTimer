@@ -603,3 +603,68 @@ jobs:
 
                   timerText.setText(
                           String.format("%02d:%02d", min
+                          , sec)
+                  );
+              }
+
+              private void whistle() {
+
+                  if (toneGenerator != null) {
+
+                      toneGenerator.startTone(
+                              ToneGenerator.TONE_PROP_BEEP2,
+                              600
+                      );
+                  }
+              }
+
+              private void tripleWhistle() {
+
+                  whistle();
+
+                  handler.postDelayed(
+                          this::whistle,
+                          800
+                  );
+
+                  handler.postDelayed(
+                          this::whistle,
+                          1600
+                  );
+              }
+
+              private void disableInputs(boolean disabled) {
+
+                  boolean enabled = !disabled;
+
+                  workInput.setEnabled(enabled);
+                  restInput.setEnabled(enabled);
+                  setsInput.setEnabled(enabled);
+                  roundsInput.setEnabled(enabled);
+                  roundRestInput.setEnabled(enabled);
+              }
+
+              @Override
+              protected void onDestroy() {
+
+                  super.onDestroy();
+
+                  if (timer != null) timer.cancel();
+
+                  handler.removeCallbacksAndMessages(null);
+
+                  if (toneGenerator != null) {
+                      toneGenerator.release();
+                  }
+              }
+          }
+          EOF
+
+      - name: Build APK
+        run: gradle :app:assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SobFitTimer-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
