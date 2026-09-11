@@ -1,4 +1,4 @@
-name: Build SABAFIT TIMER APK
+name: Build SABAHFIT TIMER APK
 
 on:
   push:
@@ -30,7 +30,7 @@ jobs:
           mkdir -p app/src/main/res/raw
           mkdir -p app/src/main/res/drawable-nodpi
 
-          cp IMG_20260908_005331.jpg app/src/main/res/drawable-nodpi/sabafit_logo.jpg
+          cp IMG_20260908_005331.jpg app/src/main/res/drawable-nodpi/sabahfit_logo.jpg
 
           cat > settings.gradle <<'EOF'
           pluginManagement {
@@ -49,7 +49,7 @@ jobs:
               }
           }
 
-          rootProject.name = "SABAFIT-TIMER"
+          rootProject.name = "SABAHFIT-TIMER"
           include ":app"
           EOF
 
@@ -72,8 +72,8 @@ jobs:
                   applicationId "com.sabafit.timer"
                   minSdk 21
                   targetSdk 35
-                  versionCode 3
-                  versionName "3.0"
+                  versionCode 4
+                  versionName "4.0"
               }
 
               compileOptions {
@@ -89,7 +89,7 @@ jobs:
 
               <application
                   android:allowBackup="true"
-                  android:label="SABAFIT TIMER"
+                  android:label="SABAHFIT TIMER"
                   android:supportsRtl="true"
                   android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
@@ -157,7 +157,6 @@ jobs:
           import android.os.Bundle;
           import android.text.InputType;
           import android.view.Gravity;
-          import android.view.ViewGroup;
           import android.view.WindowManager;
           import android.widget.Button;
           import android.widget.EditText;
@@ -172,7 +171,7 @@ jobs:
 
           public class SetupActivity extends Activity {
 
-              private static final String PREFS = "sabafit_prefs";
+              private static final String PREFS = "sabahfit_prefs";
 
               private static final int BG = Color.rgb(7, 23, 41);
               private static final int CARD = Color.rgb(13, 31, 54);
@@ -283,7 +282,7 @@ jobs:
                   card.setPadding(dp(18), dp(18), dp(18), dp(16));
 
                   ImageView logo = new ImageView(this);
-                  logo.setImageResource(R.drawable.sabafit_logo);
+                  logo.setImageResource(R.drawable.sabahfit_logo);
                   logo.setAdjustViewBounds(true);
                   logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
                   LinearLayout.LayoutParams logoParams =
@@ -293,17 +292,13 @@ jobs:
                           );
                   card.addView(logo, logoParams);
 
-                  TextView fa = makeText("صبا فیت", 26, ORANGE, true);
-                  fa.setGravity(Gravity.CENTER_HORIZONTAL);
-                  LinearLayout.LayoutParams faParams = fullWidth();
-                  faParams.topMargin = dp(8);
-                  card.addView(fa, faParams);
-
-                  TextView en = makeText("SABAFIT TIMER", 20, WHITE, true);
+                  TextView en = makeText("SABAHFIT TIMER", 22, WHITE, true);
                   en.setGravity(Gravity.CENTER_HORIZONTAL);
-                  card.addView(en, fullWidth());
+                  LinearLayout.LayoutParams enParams = fullWidth();
+                  enParams.topMargin = dp(10);
+                  card.addView(en, enParams);
 
-                  TextView slogan = makeText("حرکت  |  سلامتی  |  قدرت", 14, LIGHT, false);
+                  TextView slogan = makeText("حرکت | سلامتی | قدرت", 14, LIGHT, false);
                   slogan.setGravity(Gravity.CENTER_HORIZONTAL);
                   LinearLayout.LayoutParams sParams = fullWidth();
                   sParams.topMargin = dp(6);
@@ -337,8 +332,6 @@ jobs:
                       String value;
                       if (existingNames != null && i < existingNames.size()) {
                           value = existingNames.get(i);
-                      } else if (i < exerciseInputs.size()) {
-                          value = exerciseInputs.get(i).getText().toString().trim();
                       } else {
                           value = defaults[i];
                       }
@@ -552,7 +545,6 @@ jobs:
           import android.os.Handler;
           import android.os.Looper;
           import android.view.Gravity;
-          import android.view.View;
           import android.view.WindowManager;
           import android.widget.Button;
           import android.widget.ImageView;
@@ -584,8 +576,6 @@ jobs:
               private Button startPauseButton;
               private Button resetButton;
               private Button backButton;
-
-              private ExerciseSketchView sketchView;
 
               private SoundPool soundPool;
               private int whistleSoundId = 0;
@@ -654,10 +644,7 @@ jobs:
                           .setAudioAttributes(attributes)
                           .build();
 
-                  soundPool.setOnLoadCompleteListener((sp, sampleId, status) -> {
-                      whistleLoaded = (status == 0);
-                  });
-
+                  soundPool.setOnLoadCompleteListener((sp, sampleId, status) -> whistleLoaded = (status == 0));
                   whistleSoundId = soundPool.load(this, R.raw.coach_whistle, 1);
               }
 
@@ -674,11 +661,10 @@ jobs:
                   header.setGravity(Gravity.CENTER_VERTICAL);
 
                   ImageView logo = new ImageView(this);
-                  logo.setImageResource(R.drawable.sabafit_logo);
+                  logo.setImageResource(R.drawable.sabahfit_logo);
                   logo.setAdjustViewBounds(true);
                   logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-                  LinearLayout.LayoutParams logoParams =
-                          new LinearLayout.LayoutParams(dp(72), dp(72));
+                  LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(64), dp(64));
                   header.addView(logo, logoParams);
 
                   LinearLayout titles = new LinearLayout(this);
@@ -691,72 +677,86 @@ jobs:
                           );
                   titlesParams.leftMargin = dp(12);
 
-                  TextView brandFa = makeText("صبا فیت", 22, ORANGE, true);
-                  TextView brandEn = makeText("SABAFIT TIMER", 16, WHITE, true);
+                  TextView brandEn = makeText("SABAHFIT TIMER", 18, WHITE, true);
                   TextView slogan = makeText("حرکت | سلامتی | قدرت", 12, LIGHT, false);
 
-                  titles.addView(brandFa);
                   titles.addView(brandEn);
                   titles.addView(slogan);
 
                   header.addView(titles, titlesParams);
-
                   root.addView(header, fullWidth());
 
-                  phaseText = makeText("READY", 28, MINT, true);
+                  phaseText = makeText("آماده", 28, MINT, true);
                   phaseText.setGravity(Gravity.CENTER_HORIZONTAL);
                   LinearLayout.LayoutParams phaseParams = fullWidth();
-                  phaseParams.topMargin = dp(18);
+                  phaseParams.topMargin = dp(24);
                   root.addView(phaseText, phaseParams);
 
-                  timerText = makeText("00:00", 68, WHITE, true);
+                  timerText = makeText("00:00", 82, WHITE, true);
                   timerText.setGravity(Gravity.CENTER_HORIZONTAL);
-                  root.addView(timerText, fullWidth());
+                  LinearLayout.LayoutParams timerParams = fullWidth();
+                  timerParams.topMargin = dp(10);
+                  root.addView(timerText, timerParams);
 
-                  exerciseText = makeText(firstExercise().toUpperCase(Locale.ROOT), 25, WHITE, true);
+                  exerciseText = makeText(firstExercise(), 28, WHITE, true);
                   exerciseText.setGravity(Gravity.CENTER_HORIZONTAL);
-                  root.addView(exerciseText, fullWidth());
+                  LinearLayout.LayoutParams exerciseParams = fullWidth();
+                  exerciseParams.topMargin = dp(18);
+                  root.addView(exerciseText, exerciseParams);
 
-                  progressText = makeText("", 16, LIGHT, false);
+                  progressText = makeText("", 18, LIGHT, false);
                   progressText.setGravity(Gravity.CENTER_HORIZONTAL);
                   LinearLayout.LayoutParams progressParams = fullWidth();
-                  progressParams.topMargin = dp(4);
+                  progressParams.topMargin = dp(16);
                   root.addView(progressText, progressParams);
 
-                  nextText = makeText("", 14, SOFT, false);
+                  nextText = makeText("", 16, SOFT, false);
                   nextText.setGravity(Gravity.CENTER_HORIZONTAL);
                   LinearLayout.LayoutParams nextParams = fullWidth();
-                  nextParams.topMargin = dp(8);
-                  nextParams.bottomMargin = dp(12);
+                  nextParams.topMargin = dp(14);
+                  nextParams.bottomMargin = dp(24);
                   root.addView(nextText, nextParams);
 
-                  sketchView = new ExerciseSketchView(this);
-                  LinearLayout.LayoutParams sketchParams =
-                          new LinearLayout.LayoutParams(
-                                  LinearLayout.LayoutParams.MATCH_PARENT,
-                                  0,
-                                  1f
-                          );
-                  root.addView(sketchView, sketchParams);
+                  LinearLayout centerCard = new LinearLayout(this);
+                  centerCard.setOrientation(LinearLayout.VERTICAL);
+                  centerCard.setGravity(Gravity.CENTER);
+                  centerCard.setBackgroundColor(CARD);
+                  centerCard.setPadding(dp(18), dp(28), dp(18), dp(28));
+
+                  TextView centerLabel = makeText("حرکت جاری", 18, SOFT, false);
+                  centerLabel.setGravity(Gravity.CENTER_HORIZONTAL);
+                  centerCard.addView(centerLabel, fullWidth());
+
+                  TextView centerExercise = makeText(firstExercise(), 34, WHITE, true);
+                  centerExercise.setGravity(Gravity.CENTER_HORIZONTAL);
+                  LinearLayout.LayoutParams centerExerciseParams = fullWidth();
+                  centerExerciseParams.topMargin = dp(10);
+                  centerCard.addView(centerExercise, centerExerciseParams);
+
+                  root.addView(centerCard, fullWidth());
+
+                  exerciseText.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, orr, ob) -> {
+                      centerExercise.setText(exerciseText.getText().toString());
+                  });
 
                   LinearLayout buttonRow = new LinearLayout(this);
                   buttonRow.setOrientation(LinearLayout.VERTICAL);
+                  LinearLayout.LayoutParams buttonRowParams = fullWidth();
+                  buttonRowParams.topMargin = dp(26);
 
-                  startPauseButton = makePrimaryButton("START");
+                  startPauseButton = makePrimaryButton("شروع");
                   buttonRow.addView(startPauseButton, fullWidth());
 
-                  resetButton = makeSecondaryButton("RESET");
+                  resetButton = makeSecondaryButton("شروع مجدد");
                   LinearLayout.LayoutParams resetParams = fullWidth();
                   resetParams.topMargin = dp(10);
                   buttonRow.addView(resetButton, resetParams);
 
-                  backButton = makeDangerButton("BACK TO SETTINGS");
+                  backButton = makeDangerButton("بازگشت به تنظیمات");
                   LinearLayout.LayoutParams backParams = fullWidth();
                   backParams.topMargin = dp(10);
                   buttonRow.addView(backButton, backParams);
 
-                  LinearLayout.LayoutParams buttonRowParams = fullWidth();
-                  buttonRowParams.topMargin = dp(16);
                   root.addView(buttonRow, buttonRowParams);
 
                   setContentView(root);
@@ -782,10 +782,9 @@ jobs:
               }
 
               private void startReady() {
-                  phaseText.setText("READY");
+                  phaseText.setText("آماده");
                   phaseText.setTextColor(MINT);
-                  exerciseText.setText(firstExercise().toUpperCase(Locale.ROOT));
-                  sketchView.setExerciseName(firstExercise());
+                  exerciseText.setText(firstExercise());
                   nextText.setText("شروع با: " + firstExercise());
                   updateProgress();
                   tripleWhistle();
@@ -793,15 +792,14 @@ jobs:
               }
 
               private void startWork() {
-                  phaseText.setText("WORK");
+                  phaseText.setText("تمرین");
                   phaseText.setTextColor(MINT);
 
                   String currentName = exerciseNames.get(currentExercise);
-                  exerciseText.setText(currentName.toUpperCase(Locale.ROOT));
-                  sketchView.setExerciseName(currentName);
+                  exerciseText.setText(currentName);
 
                   String next = getNextExerciseName();
-                  nextText.setText(next == null ? "آخرین بخش این راند" : "بعدی: " + next);
+                  nextText.setText(next == null ? "آخرین بخش این راند" : "حرکت بعدی: " + next);
 
                   updateProgress();
                   whistle();
@@ -836,25 +834,23 @@ jobs:
               }
 
               private void startExerciseRest() {
-                  phaseText.setText("REST");
+                  phaseText.setText("استراحت");
                   phaseText.setTextColor(ORANGE);
 
                   String nextName = exerciseNames.get(currentExercise);
-                  exerciseText.setText(("NEXT: " + nextName).toUpperCase(Locale.ROOT));
-                  sketchView.setExerciseName(nextName);
-                  nextText.setText("آماده شو برای: " + nextName);
+                  exerciseText.setText(nextName);
+                  nextText.setText("بعد از استراحت: " + nextName);
 
                   updateProgress();
                   runTimer(restSeconds * 1000L, this::startWork);
               }
 
               private void startRoundRest() {
-                  phaseText.setText("ROUND REST");
+                  phaseText.setText("استراحت بین راندها");
                   phaseText.setTextColor(ORANGE);
 
                   String nextName = firstExercise();
-                  exerciseText.setText(("ROUND " + currentRound).toUpperCase(Locale.ROOT));
-                  sketchView.setExerciseName(nextName);
+                  exerciseText.setText("راند " + currentRound);
                   nextText.setText("شروع راند بعدی با: " + nextName);
 
                   updateProgress();
@@ -868,13 +864,12 @@ jobs:
                   if (timer != null) timer.cancel();
                   remainingMs = 0;
 
-                  phaseText.setText("COMPLETE");
+                  phaseText.setText("پایان تمرین");
                   phaseText.setTextColor(MINT);
                   timerText.setText("00:00");
-                  exerciseText.setText("GREAT JOB!");
+                  exerciseText.setText("آفرین!");
                   nextText.setText("تمرین با موفقیت به پایان رسید");
-                  sketchView.setExerciseName("done");
-                  startPauseButton.setText("START");
+                  startPauseButton.setText("شروع");
 
                   tripleWhistle();
               }
@@ -882,9 +877,9 @@ jobs:
               private void pauseWorkout() {
                   if (timer != null) timer.cancel();
                   paused = true;
-                  phaseText.setText("PAUSED");
+                  phaseText.setText("مکث");
                   phaseText.setTextColor(RED);
-                  startPauseButton.setText("RESUME");
+                  startPauseButton.setText("ادامه");
               }
 
               private void resumeWorkout() {
@@ -903,17 +898,16 @@ jobs:
                   currentSet = 1;
                   currentRound = 1;
 
-                  startPauseButton.setText("START");
+                  startPauseButton.setText("شروع");
                   showIdle();
               }
 
               private void showIdle() {
-                  phaseText.setText("READY");
+                  phaseText.setText("آماده");
                   phaseText.setTextColor(MINT);
                   timerText.setText("00:00");
-                  exerciseText.setText(firstExercise().toUpperCase(Locale.ROOT));
-                  nextText.setText("برای شروع، دکمه START را بزن");
-                  sketchView.setExerciseName(firstExercise());
+                  exerciseText.setText(firstExercise());
+                  nextText.setText("برای شروع، دکمه شروع را بزن");
                   updateProgress();
               }
 
@@ -921,7 +915,7 @@ jobs:
                   progressText.setText(
                           String.format(
                                   Locale.US,
-                                  "EX %d/%d   SET %d/%d   ROUND %d/%d",
+                                  "تمرین %d از %d | ست %d از %d | راند %d از %d",
                                   currentExercise + 1,
                                   exerciseCount,
                                   currentSet,
@@ -961,7 +955,7 @@ jobs:
                   };
 
                   timer.start();
-                  startPauseButton.setText("PAUSE");
+                  startPauseButton.setText("مکث");
               }
 
               private void displayTime(long seconds) {
@@ -1011,7 +1005,7 @@ jobs:
               private Button makePrimaryButton(String text) {
                   Button b = new Button(this);
                   b.setText(text);
-                  b.setAllCaps(true);
+                  b.setAllCaps(false);
                   b.setTextColor(BG);
                   b.setTextSize(18);
                   b.setTypeface(Typeface.DEFAULT_BOLD);
@@ -1023,7 +1017,7 @@ jobs:
               private Button makeSecondaryButton(String text) {
                   Button b = new Button(this);
                   b.setText(text);
-                  b.setAllCaps(true);
+                  b.setAllCaps(false);
                   b.setTextColor(WHITE);
                   b.setTextSize(16);
                   b.setTypeface(Typeface.DEFAULT_BOLD);
@@ -1035,7 +1029,7 @@ jobs:
               private Button makeDangerButton(String text) {
                   Button b = new Button(this);
                   b.setText(text);
-                  b.setAllCaps(true);
+                  b.setAllCaps(false);
                   b.setTextColor(WHITE);
                   b.setTextSize(15);
                   b.setTypeface(Typeface.DEFAULT_BOLD);
@@ -1069,235 +1063,11 @@ jobs:
           }
           EOF
 
-          cat > app/src/main/java/com/sabafit/timer/ExerciseSketchView.java <<'EOF'
-          package com.sabafit.timer;
-
-          import android.content.Context;
-          import android.graphics.Canvas;
-          import android.graphics.Color;
-          import android.graphics.Paint;
-          import android.graphics.RectF;
-          import android.view.View;
-
-          import java.util.Locale;
-
-          public class ExerciseSketchView extends View {
-
-              private static final int WHITE = Color.WHITE;
-              private static final int SOFT = Color.rgb(160, 175, 190);
-
-              private final Paint borderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-              private final Paint linePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-              private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-              private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-
-              private String exerciseName = "exercise";
-
-              public ExerciseSketchView(Context context) {
-                  super(context);
-
-                  borderPaint.setStyle(Paint.Style.STROKE);
-                  borderPaint.setStrokeWidth(dp(2));
-                  borderPaint.setColor(Color.rgb(38, 72, 112));
-
-                  fillPaint.setStyle(Paint.Style.FILL);
-                  fillPaint.setColor(Color.rgb(34, 34, 40));
-
-                  linePaint.setStyle(Paint.Style.STROKE);
-                  linePaint.setStrokeWidth(dp(4));
-                  linePaint.setStrokeCap(Paint.Cap.ROUND);
-                  linePaint.setColor(WHITE);
-
-                  textPaint.setColor(SOFT);
-                  textPaint.setTextSize(dp(8));
-                  textPaint.setTextAlign(Paint.Align.CENTER);
-              }
-
-              public void setExerciseName(String name) {
-                  if (name == null || name.trim().isEmpty()) {
-                      exerciseName = "exercise";
-                  } else {
-                      exerciseName = name.trim().toLowerCase(Locale.ROOT);
-                  }
-                  invalidate();
-              }
-
-              @Override
-              protected void onDraw(Canvas canvas) {
-                  super.onDraw(canvas);
-
-                  float w = getWidth();
-                  float h = getHeight();
-
-                  RectF card = new RectF(dp(4), dp(4), w - dp(4), h - dp(4));
-                  canvas.drawRoundRect(card, dp(18), dp(18), fillPaint);
-                  canvas.drawRoundRect(card, dp(18), dp(18), borderPaint);
-
-                  canvas.drawText(
-                          exerciseName.toUpperCase(Locale.ROOT),
-                          w / 2f,
-                          dp(22),
-                          textPaint
-                  );
-
-                  if (exerciseName.contains("burpee") || exerciseName.contains("برپی")) {
-                      drawBurpee(canvas, w, h);
-                  } else if (exerciseName.contains("squat") || exerciseName.contains("اسکات")) {
-                      drawSquat(canvas, w, h);
-                  } else if (
-                          exerciseName.contains("push") ||
-                          exerciseName.contains("شنا")
-                  ) {
-                      drawPush(canvas, w, h);
-                  } else if (exerciseName.contains("lunge") || exerciseName.contains("لانج")) {
-                      drawLunge(canvas, w, h);
-                  } else if (exerciseName.contains("plank") || exerciseName.contains("پلانک")) {
-                      drawPlank(canvas, w, h);
-                  } else if (exerciseName.contains("deadlift") || exerciseName.contains("دد")) {
-                      drawDeadlift(canvas, w, h);
-                  } else if (exerciseName.contains("press") || exerciseName.contains("پرس")) {
-                      drawPress(canvas, w, h);
-                  } else if (
-                          exerciseName.contains("sit") ||
-                          exerciseName.contains("crunch") ||
-                          exerciseName.contains("دراز")
-                  ) {
-                      drawSitup(canvas, w, h);
-                  } else if (exerciseName.contains("jump") || exerciseName.contains("جامپ")) {
-                      drawJumpingJack(canvas, w, h);
-                  } else if (exerciseName.contains("done")) {
-                      drawDone(canvas, w, h);
-                  } else {
-                      drawGeneric(canvas, w, h);
-                  }
-              }
-
-              private void drawHead(Canvas c, float x, float y, float r) {
-                  c.drawCircle(x, y, r, linePaint);
-              }
-
-              private void drawBurpee(Canvas c, float w, float h) {
-                  drawHead(c, w * 0.30f, h * 0.34f, dp(12));
-                  c.drawLine(w * 0.30f, h * 0.40f, w * 0.30f, h * 0.56f, linePaint);
-                  c.drawLine(w * 0.30f, h * 0.45f, w * 0.22f, h * 0.52f, linePaint);
-                  c.drawLine(w * 0.30f, h * 0.45f, w * 0.38f, h * 0.52f, linePaint);
-                  c.drawLine(w * 0.30f, h * 0.56f, w * 0.24f, h * 0.70f, linePaint);
-                  c.drawLine(w * 0.30f, h * 0.56f, w * 0.36f, h * 0.70f, linePaint);
-
-                  drawHead(c, w * 0.72f, h * 0.48f, dp(12));
-                  c.drawLine(w * 0.68f, h * 0.55f, w * 0.46f, h * 0.62f, linePaint);
-                  c.drawLine(w * 0.68f, h * 0.55f, w * 0.84f, h * 0.60f, linePaint);
-                  c.drawLine(w * 0.52f, h * 0.62f, w * 0.42f, h * 0.72f, linePaint);
-                  c.drawLine(w * 0.52f, h * 0.62f, w * 0.68f, h * 0.72f, linePaint);
-              }
-
-              private void drawSquat(Canvas c, float w, float h) {
-                  float x = w * 0.50f;
-                  drawHead(c, x, h * 0.26f, dp(13));
-                  c.drawLine(x, h * 0.32f, x, h * 0.52f, linePaint);
-                  c.drawLine(x, h * 0.38f, x - dp(36), h * 0.44f, linePaint);
-                  c.drawLine(x, h * 0.38f, x + dp(36), h * 0.44f, linePaint);
-                  c.drawLine(x, h * 0.52f, x - dp(34), h * 0.62f, linePaint);
-                  c.drawLine(x - dp(34), h * 0.62f, x - dp(16), h * 0.74f, linePaint);
-                  c.drawLine(x, h * 0.52f, x + dp(34), h * 0.62f, linePaint);
-                  c.drawLine(x + dp(34), h * 0.62f, x + dp(16), h * 0.74f, linePaint);
-              }
-
-              private void drawPush(Canvas c, float w, float h) {
-                  drawHead(c, w * 0.24f, h * 0.50f, dp(11));
-                  c.drawLine(w * 0.30f, h * 0.50f, w * 0.68f, h * 0.50f, linePaint);
-                  c.drawLine(w * 0.36f, h * 0.50f, w * 0.30f, h * 0.68f, linePaint);
-                  c.drawLine(w * 0.60f, h * 0.50f, w * 0.68f, h * 0.68f, linePaint);
-                  c.drawLine(w * 0.68f, h * 0.50f, w * 0.82f, h * 0.50f, linePaint);
-              }
-
-              private void drawLunge(Canvas c, float w, float h) {
-                  float x = w * 0.48f;
-                  drawHead(c, x, h * 0.24f, dp(13));
-                  c.drawLine(x, h * 0.30f, x, h * 0.52f, linePaint);
-                  c.drawLine(x, h * 0.38f, x - dp(34), h * 0.46f, linePaint);
-                  c.drawLine(x, h * 0.38f, x + dp(36), h * 0.42f, linePaint);
-                  c.drawLine(x, h * 0.52f, x - dp(42), h * 0.66f, linePaint);
-                  c.drawLine(x - dp(42), h * 0.66f, x - dp(42), h * 0.78f, linePaint);
-                  c.drawLine(x, h * 0.52f, x + dp(30), h * 0.58f, linePaint);
-                  c.drawLine(x + dp(30), h * 0.58f, x + dp(52), h * 0.74f, linePaint);
-              }
-
-              private void drawPlank(Canvas c, float w, float h) {
-                  drawHead(c, w * 0.22f, h * 0.46f, dp(11));
-                  c.drawLine(w * 0.28f, h * 0.46f, w * 0.72f, h * 0.54f, linePaint);
-                  c.drawLine(w * 0.36f, h * 0.48f, w * 0.30f, h * 0.66f, linePaint);
-                  c.drawLine(w * 0.66f, h * 0.53f, w * 0.76f, h * 0.70f, linePaint);
-              }
-
-              private void drawDeadlift(Canvas c, float w, float h) {
-                  float x = w * 0.50f;
-                  drawHead(c, x, h * 0.28f, dp(13));
-                  c.drawLine(x, h * 0.34f, x, h * 0.54f, linePaint);
-                  c.drawLine(x, h * 0.42f, x - dp(34), h * 0.58f, linePaint);
-                  c.drawLine(x, h * 0.42f, x + dp(34), h * 0.58f, linePaint);
-                  c.drawLine(x, h * 0.54f, x - dp(20), h * 0.72f, linePaint);
-                  c.drawLine(x, h * 0.54f, x + dp(18), h * 0.72f, linePaint);
-                  c.drawLine(w * 0.28f, h * 0.62f, w * 0.72f, h * 0.62f, linePaint);
-                  c.drawCircle(w * 0.22f, h * 0.62f, dp(10), linePaint);
-                  c.drawCircle(w * 0.78f, h * 0.62f, dp(10), linePaint);
-              }
-
-              private void drawPress(Canvas c, float w, float h) {
-                  float x = w * 0.50f;
-                  drawHead(c, x, h * 0.30f, dp(13));
-                  c.drawLine(x, h * 0.36f, x, h * 0.60f, linePaint);
-                  c.drawLine(x, h * 0.60f, x - dp(24), h * 0.76f, linePaint);
-                  c.drawLine(x, h * 0.60f, x + dp(24), h * 0.76f, linePaint);
-                  c.drawLine(x - dp(22), h * 0.42f, x - dp(22), h * 0.22f, linePaint);
-                  c.drawLine(x + dp(22), h * 0.42f, x + dp(22), h * 0.22f, linePaint);
-                  c.drawLine(x - dp(44), h * 0.22f, x + dp(44), h * 0.22f, linePaint);
-              }
-
-              private void drawSitup(Canvas c, float w, float h) {
-                  drawHead(c, w * 0.35f, h * 0.44f, dp(11));
-                  c.drawLine(w * 0.40f, h * 0.48f, w * 0.56f, h * 0.62f, linePaint);
-                  c.drawLine(w * 0.56f, h * 0.62f, w * 0.72f, h * 0.62f, linePaint);
-                  c.drawLine(w * 0.56f, h * 0.62f, w * 0.70f, h * 0.78f, linePaint);
-                  c.drawLine(w * 0.72f, h * 0.62f, w * 0.82f, h * 0.54f, linePaint);
-              }
-
-              private void drawJumpingJack(Canvas c, float w, float h) {
-                  float x = w * 0.50f;
-                  drawHead(c, x, h * 0.24f, dp(13));
-                  c.drawLine(x, h * 0.30f, x, h * 0.54f, linePaint);
-                  c.drawLine(x, h * 0.38f, x - dp(48), h * 0.22f, linePaint);
-                  c.drawLine(x, h * 0.38f, x + dp(48), h * 0.22f, linePaint);
-                  c.drawLine(x, h * 0.54f, x - dp(42), h * 0.76f, linePaint);
-                  c.drawLine(x, h * 0.54f, x + dp(42), h * 0.76f, linePaint);
-              }
-
-              private void drawDone(Canvas c, float w, float h) {
-                  c.drawLine(w * 0.30f, h * 0.56f, w * 0.45f, h * 0.70f, linePaint);
-                  c.drawLine(w * 0.45f, h * 0.70f, w * 0.72f, h * 0.36f, linePaint);
-              }
-
-              private void drawGeneric(Canvas c, float w, float h) {
-                  float x = w * 0.50f;
-                  drawHead(c, x, h * 0.24f, dp(13));
-                  c.drawLine(x, h * 0.30f, x, h * 0.56f, linePaint);
-                  c.drawLine(x, h * 0.40f, x - dp(34), h * 0.52f, linePaint);
-                  c.drawLine(x, h * 0.40f, x + dp(34), h * 0.52f, linePaint);
-                  c.drawLine(x, h * 0.56f, x - dp(26), h * 0.76f, linePaint);
-                  c.drawLine(x, h * 0.56f, x + dp(26), h * 0.76f, linePaint);
-              }
-
-              private float dp(int value) {
-                  return value * getResources().getDisplayMetrics().density;
-              }
-          }
-          EOF
-
       - name: Build APK
         run: gradle :app:assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SABAFIT-TIMER-v3-APK
+          name: SABAHFIT-TIMER-v4-APK
           path: app/build/outputs/apk/debug/app-debug.apk
