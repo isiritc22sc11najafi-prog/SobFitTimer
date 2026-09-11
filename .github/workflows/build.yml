@@ -28,6 +28,9 @@ jobs:
         run: |
           mkdir -p app/src/main/java/com/sabafit/timer
           mkdir -p app/src/main/res/raw
+          mkdir -p app/src/main/res/drawable-nodpi
+
+          cp IMG_20260908_005331.jpg app/src/main/res/drawable-nodpi/sabafit_logo.jpg
 
           cat > settings.gradle <<'EOF'
           pluginManagement {
@@ -69,17 +72,14 @@ jobs:
                   applicationId "com.sabafit.timer"
                   minSdk 21
                   targetSdk 35
-                  versionCode 2
-                  versionName "2.0"
+                  versionCode 3
+                  versionName "3.0"
               }
 
               compileOptions {
                   sourceCompatibility JavaVersion.VERSION_17
                   targetCompatibility JavaVersion.VERSION_17
               }
-          }
-
-          dependencies {
           }
           EOF
 
@@ -94,7 +94,12 @@ jobs:
                   android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
                   <activity
-                      android:name=".MainActivity"
+                      android:name=".WorkoutActivity"
+                      android:screenOrientation="portrait"
+                      android:exported="false" />
+
+                  <activity
+                      android:name=".SetupActivity"
                       android:screenOrientation="portrait"
                       android:exported="true">
 
@@ -117,7 +122,7 @@ jobs:
           path = "app/src/main/res/raw/coach_whistle.wav"
 
           sample_rate = 44100
-          duration = 0.75
+          duration = 0.95
           total = int(sample_rate * duration)
 
           with wave.open(path, "w") as wf:
@@ -127,46 +132,36 @@ jobs:
 
               for i in range(total):
                   t = i / sample_rate
-
-                  base = 1800 + 500 * math.sin(2 * math.pi * 3.4 * t)
-                  chirp = 300 * math.sin(2 * math.pi * 8.0 * t)
-                  freq = base + chirp
-
-                  env_attack = min(1.0, t / 0.06)
-                  env_release = min(1.0, (duration - t) / 0.12)
-                  env = max(0.0, min(env_attack, env_release))
-
-                  vibrato = 1.0 + 0.01 * math.sin(2 * math.pi * 12.0 * t)
-                  sample = math.sin(2 * math.pi * freq * vibrato * t)
-                  sample += 0.35 * math.sin(2 * math.pi * (freq * 2.0) * t)
-                  sample *= 0.72 * env
-
-                  value = int(max(-1.0, min(1.0, sample)) * 32767)
+                  base = 1950 + 480 * math.sin(2 * math.pi * 3.5 * t)
+                  flutter = 120 * math.sin(2 * math.pi * 18 * t)
+                  freq = base + flutter
+                  attack = min(1.0, t / 0.04)
+                  release = min(1.0, (duration - t) / 0.14)
+                  env = max(0.0, min(attack, release))
+                  s = math.sin(2 * math.pi * freq * t)
+                  s += 0.40 * math.sin(2 * math.pi * freq * 2 * t)
+                  s += 0.14 * math.sin(2 * math.pi * freq * 3 * t)
+                  s *= 0.80 * env
+                  value = int(max(-1.0, min(1.0, s)) * 32767)
                   wf.writeframes(struct.pack('<h', value))
           PY
 
-          cat > app/src/main/java/com/sabafit/timer/MainActivity.java <<'EOF'
+          cat > app/src/main/java/com/sabafit/timer/SetupActivity.java <<'EOF'
           package com.sabafit.timer;
 
           import android.app.Activity;
-          import android.graphics.Canvas;
+          import android.content.Intent;
+          import android.content.SharedPreferences;
           import android.graphics.Color;
-          import android.graphics.Paint;
-          import android.graphics.RectF;
-          import android.media.AudioAttributes;
-          import android.media.SoundPool;
+          import android.graphics.Typeface;
           import android.os.Bundle;
-          import android.os.CountDownTimer;
-          import android.os.Handler;
-          import android.os.Looper;
           import android.text.InputType;
           import android.view.Gravity;
-          import android.view.View;
           import android.view.ViewGroup;
           import android.view.WindowManager;
           import android.widget.Button;
           import android.widget.EditText;
-          import android.widget.HorizontalScrollView;
+          import android.widget.ImageView;
           import android.widget.LinearLayout;
           import android.widget.ScrollView;
           import android.widget.TextView;
@@ -174,9 +169,409 @@ jobs:
 
           import java.util.ArrayList;
           import java.util.List;
+
+          public class SetupActivity extends Activity {
+
+              private static final String PREFS = "sabafit_prefs";
+
+              private static final int BG = Color.rgb(7, 23, 41);
+              private static final int CARD = Color.rgb(13, 31, 54);
+              private static final int FIELD = Color.rgb(18, 42, 71);
+              private static final int ORANGE = Color.rgb(255, 132, 0);
+              private static final int WHITE = Color.WHITE;
+              private static final int LIGHT = Color.rgb(225, 232, 238);
+              private static final int SOFT = Color.rgb(155, 175, 190);
+              private static final int MINT = Color.rgb(86, 233, 179);
+
+              private EditText exerciseCountInput;
+              private EditText workInput;
+              private EditText restInput;
+              private EditText setsInput;
+              private EditText roundsInput;
+              private EditText roundRestInput;
+
+              private Button applyExercisesButton;
+              private Button startButton;
+
+              private LinearLayout exerciseFieldsContainer;
+              private final List<EditText> exerciseInputs = new ArrayList<>();
+
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+                  buildInterface();
+                  loadSavedSettings();
+              }
+
+              private void buildInterface() {
+                  ScrollView scrollView = new ScrollView(this);
+                  scrollView.setFillViewport(true);
+
+                  LinearLayout root = new LinearLayout(this);
+                  root.setOrientation(LinearLayout.VERTICAL);
+                  root.setBackgroundColor(BG);
+                  root.setPadding(dp(18), dp(18), dp(18), dp(28));
+
+                  root.addView(makeHeader());
+
+                  LinearLayout settingsCard = new LinearLayout(this);
+                  settingsCard.setOrientation(LinearLayout.VERTICAL);
+                  settingsCard.setBackgroundColor(CARD);
+                  settingsCard.setPadding(dp(16), dp(16), dp(16), dp(16));
+
+                  TextView title = makeText("تنظیمات تمرین", 22, WHITE, true);
+                  LinearLayout.LayoutParams titleParams = fullWidth();
+                  titleParams.bottomMargin = dp(8);
+                  settingsCard.addView(title, titleParams);
+
+                  exerciseCountInput = addNumberField(settingsCard, "تعداد تمرین‌ها (1 تا 10)", "3");
+
+                  applyExercisesButton = makeSecondaryButton("اعمال تعداد تمرین");
+                  LinearLayout.LayoutParams applyParams = fullWidth();
+                  applyParams.topMargin = dp(8);
+                  settingsCard.addView(applyExercisesButton, applyParams);
+
+                  workInput = addNumberField(settingsCard, "زمان هر تمرین (ثانیه)", "100");
+                  restInput = addNumberField(settingsCard, "استراحت بین تمرین‌ها (ثانیه)", "20");
+                  setsInput = addNumberField(settingsCard, "تعداد ست", "3");
+                  roundsInput = addNumberField(settingsCard, "تعداد راند", "2");
+                  roundRestInput = addNumberField(settingsCard, "استراحت بین راندها (ثانیه)", "180");
+
+                  TextView exercisesLabel = makeText("نام تمرین‌ها", 18, WHITE, true);
+                  LinearLayout.LayoutParams exParams = fullWidth();
+                  exParams.topMargin = dp(12);
+                  exParams.bottomMargin = dp(6);
+                  settingsCard.addView(exercisesLabel, exParams);
+
+                  exerciseFieldsContainer = new LinearLayout(this);
+                  exerciseFieldsContainer.setOrientation(LinearLayout.VERTICAL);
+                  settingsCard.addView(exerciseFieldsContainer, fullWidth());
+
+                  root.addView(settingsCard, fullWidth());
+
+                  startButton = makePrimaryButton("شروع تمرین");
+                  LinearLayout.LayoutParams startParams = fullWidth();
+                  startParams.topMargin = dp(18);
+                  root.addView(startButton, startParams);
+
+                  TextView note = makeText(
+                          "تنظیمات شما ذخیره می‌شود و در اجرای بعدی باقی می‌ماند.",
+                          12,
+                          SOFT,
+                          false
+                  );
+                  note.setGravity(Gravity.CENTER_HORIZONTAL);
+                  LinearLayout.LayoutParams noteParams = fullWidth();
+                  noteParams.topMargin = dp(12);
+                  root.addView(note, noteParams);
+
+                  scrollView.addView(root);
+                  setContentView(scrollView);
+
+                  applyExercisesButton.setOnClickListener(v -> applyExerciseCount());
+                  startButton.setOnClickListener(v -> startWorkout());
+
+                  generateExerciseInputs(3, null);
+              }
+
+              private LinearLayout makeHeader() {
+                  LinearLayout card = new LinearLayout(this);
+                  card.setOrientation(LinearLayout.VERTICAL);
+                  card.setBackgroundColor(CARD);
+                  card.setPadding(dp(18), dp(18), dp(18), dp(16));
+
+                  ImageView logo = new ImageView(this);
+                  logo.setImageResource(R.drawable.sabafit_logo);
+                  logo.setAdjustViewBounds(true);
+                  logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                  LinearLayout.LayoutParams logoParams =
+                          new LinearLayout.LayoutParams(
+                                  LinearLayout.LayoutParams.MATCH_PARENT,
+                                  dp(120)
+                          );
+                  card.addView(logo, logoParams);
+
+                  TextView fa = makeText("صبا فیت", 26, ORANGE, true);
+                  fa.setGravity(Gravity.CENTER_HORIZONTAL);
+                  LinearLayout.LayoutParams faParams = fullWidth();
+                  faParams.topMargin = dp(8);
+                  card.addView(fa, faParams);
+
+                  TextView en = makeText("SABAFIT TIMER", 20, WHITE, true);
+                  en.setGravity(Gravity.CENTER_HORIZONTAL);
+                  card.addView(en, fullWidth());
+
+                  TextView slogan = makeText("حرکت  |  سلامتی  |  قدرت", 14, LIGHT, false);
+                  slogan.setGravity(Gravity.CENTER_HORIZONTAL);
+                  LinearLayout.LayoutParams sParams = fullWidth();
+                  sParams.topMargin = dp(6);
+                  card.addView(slogan, sParams);
+
+                  return card;
+              }
+
+              private void generateExerciseInputs(int count, ArrayList<String> existingNames) {
+                  exerciseFieldsContainer.removeAllViews();
+                  exerciseInputs.clear();
+
+                  String[] defaults = new String[]{
+                          "Burpee", "Lift", "Push Press", "Squat", "Push-up",
+                          "Lunge", "Plank", "Deadlift", "Jumping Jack", "Sit-up"
+                  };
+
+                  for (int i = 0; i < count; i++) {
+                      TextView label = makeText("تمرین " + (i + 1), 14, LIGHT, false);
+                      LinearLayout.LayoutParams lp = fullWidth();
+                      lp.topMargin = dp(6);
+                      exerciseFieldsContainer.addView(label, lp);
+
+                      EditText input = new EditText(this);
+                      input.setSingleLine(true);
+                      input.setTextColor(WHITE);
+                      input.setHintTextColor(SOFT);
+                      input.setBackgroundColor(FIELD);
+                      input.setPadding(dp(14), dp(12), dp(14), dp(12));
+
+                      String value;
+                      if (existingNames != null && i < existingNames.size()) {
+                          value = existingNames.get(i);
+                      } else if (i < exerciseInputs.size()) {
+                          value = exerciseInputs.get(i).getText().toString().trim();
+                      } else {
+                          value = defaults[i];
+                      }
+
+                      input.setText(value);
+
+                      LinearLayout.LayoutParams ip = fullWidth();
+                      ip.topMargin = dp(4);
+                      ip.bottomMargin = dp(4);
+                      exerciseFieldsContainer.addView(input, ip);
+                      exerciseInputs.add(input);
+                  }
+              }
+
+              private void applyExerciseCount() {
+                  try {
+                      int count = parseIntInRange(exerciseCountInput, 1, 10);
+                      ArrayList<String> current = getCurrentExerciseNames();
+                      generateExerciseInputs(count, current);
+                      Toast.makeText(this, "تعداد تمرین‌ها به‌روزرسانی شد", Toast.LENGTH_SHORT).show();
+                  } catch (Exception e) {
+                      Toast.makeText(this, "تعداد تمرین باید بین 1 تا 10 باشد", Toast.LENGTH_LONG).show();
+                  }
+              }
+
+              private ArrayList<String> getCurrentExerciseNames() {
+                  ArrayList<String> list = new ArrayList<>();
+                  for (int i = 0; i < exerciseInputs.size(); i++) {
+                      String s = exerciseInputs.get(i).getText().toString().trim();
+                      if (s.isEmpty()) s = "Exercise " + (i + 1);
+                      list.add(s);
+                  }
+                  return list;
+              }
+
+              private void startWorkout() {
+                  try {
+                      int exerciseCount = parseIntInRange(exerciseCountInput, 1, 10);
+                      int work = parseIntInRange(workInput, 1, 3600);
+                      int rest = parseIntInRange(restInput, 0, 3600);
+                      int sets = parseIntInRange(setsInput, 1, 100);
+                      int rounds = parseIntInRange(roundsInput, 1, 100);
+                      int roundRest = parseIntInRange(roundRestInput, 0, 3600);
+
+                      if (exerciseInputs.size() != exerciseCount) {
+                          generateExerciseInputs(exerciseCount, getCurrentExerciseNames());
+                      }
+
+                      ArrayList<String> exercises = getCurrentExerciseNames();
+                      while (exercises.size() > exerciseCount) {
+                          exercises.remove(exercises.size() - 1);
+                      }
+
+                      saveSettings(exerciseCount, work, rest, sets, rounds, roundRest, exercises);
+
+                      Intent intent = new Intent(this, WorkoutActivity.class);
+                      intent.putExtra("exerciseCount", exerciseCount);
+                      intent.putExtra("work", work);
+                      intent.putExtra("rest", rest);
+                      intent.putExtra("sets", sets);
+                      intent.putExtra("rounds", rounds);
+                      intent.putExtra("roundRest", roundRest);
+                      intent.putStringArrayListExtra("exerciseNames", exercises);
+                      startActivity(intent);
+
+                  } catch (Exception e) {
+                      Toast.makeText(this, "لطفاً همه تنظیمات را درست وارد کنید", Toast.LENGTH_LONG).show();
+                  }
+              }
+
+              private void saveSettings(
+                      int exerciseCount,
+                      int work,
+                      int rest,
+                      int sets,
+                      int rounds,
+                      int roundRest,
+                      ArrayList<String> exercises
+              ) {
+                  SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
+                  SharedPreferences.Editor ed = sp.edit();
+
+                  ed.putInt("exerciseCount", exerciseCount);
+                  ed.putInt("work", work);
+                  ed.putInt("rest", rest);
+                  ed.putInt("sets", sets);
+                  ed.putInt("rounds", rounds);
+                  ed.putInt("roundRest", roundRest);
+
+                  for (int i = 0; i < 10; i++) {
+                      String value = i < exercises.size() ? exercises.get(i) : "";
+                      ed.putString("exercise_" + i, value);
+                  }
+
+                  ed.apply();
+              }
+
+              private void loadSavedSettings() {
+                  SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
+
+                  int exerciseCount = sp.getInt("exerciseCount", 3);
+                  exerciseCountInput.setText(String.valueOf(exerciseCount));
+                  workInput.setText(String.valueOf(sp.getInt("work", 100)));
+                  restInput.setText(String.valueOf(sp.getInt("rest", 20)));
+                  setsInput.setText(String.valueOf(sp.getInt("sets", 3)));
+                  roundsInput.setText(String.valueOf(sp.getInt("rounds", 2)));
+                  roundRestInput.setText(String.valueOf(sp.getInt("roundRest", 180)));
+
+                  ArrayList<String> names = new ArrayList<>();
+                  for (int i = 0; i < exerciseCount; i++) {
+                      String v = sp.getString("exercise_" + i, "");
+                      if (v == null || v.trim().isEmpty()) {
+                          String[] defaults = new String[]{
+                                  "Burpee", "Lift", "Push Press", "Squat", "Push-up",
+                                  "Lunge", "Plank", "Deadlift", "Jumping Jack", "Sit-up"
+                          };
+                          v = defaults[i];
+                      }
+                      names.add(v);
+                  }
+
+                  generateExerciseInputs(exerciseCount, names);
+              }
+
+              private int parseIntInRange(EditText e, int min, int max) {
+                  int value = Integer.parseInt(e.getText().toString().trim());
+                  if (value < min || value > max) throw new RuntimeException();
+                  return value;
+              }
+
+              private EditText addNumberField(LinearLayout parent, String label, String value) {
+                  TextView tv = makeText(label, 14, LIGHT, false);
+                  LinearLayout.LayoutParams tvp = fullWidth();
+                  tvp.topMargin = dp(8);
+                  parent.addView(tv, tvp);
+
+                  EditText input = new EditText(this);
+                  input.setInputType(InputType.TYPE_CLASS_NUMBER);
+                  input.setSingleLine(true);
+                  input.setText(value);
+                  input.setTextColor(WHITE);
+                  input.setHintTextColor(SOFT);
+                  input.setBackgroundColor(FIELD);
+                  input.setPadding(dp(14), dp(12), dp(14), dp(12));
+
+                  LinearLayout.LayoutParams ip = fullWidth();
+                  ip.topMargin = dp(4);
+                  parent.addView(input, ip);
+
+                  return input;
+              }
+
+              private TextView makeText(String text, int size, int color, boolean bold) {
+                  TextView t = new TextView(this);
+                  t.setText(text);
+                  t.setTextSize(size);
+                  t.setTextColor(color);
+                  if (bold) t.setTypeface(Typeface.DEFAULT_BOLD);
+                  return t;
+              }
+
+              private Button makePrimaryButton(String text) {
+                  Button b = new Button(this);
+                  b.setText(text);
+                  b.setAllCaps(false);
+                  b.setTextColor(BG);
+                  b.setTextSize(20);
+                  b.setTypeface(Typeface.DEFAULT_BOLD);
+                  b.setBackgroundColor(MINT);
+                  b.setPadding(dp(10), dp(14), dp(10), dp(14));
+                  return b;
+              }
+
+              private Button makeSecondaryButton(String text) {
+                  Button b = new Button(this);
+                  b.setText(text);
+                  b.setAllCaps(false);
+                  b.setTextColor(WHITE);
+                  b.setTextSize(16);
+                  b.setTypeface(Typeface.DEFAULT_BOLD);
+                  b.setBackgroundColor(Color.rgb(28, 56, 90));
+                  b.setPadding(dp(10), dp(12), dp(10), dp(12));
+                  return b;
+              }
+
+              private LinearLayout.LayoutParams fullWidth() {
+                  return new LinearLayout.LayoutParams(
+                          LinearLayout.LayoutParams.MATCH_PARENT,
+                          LinearLayout.LayoutParams.WRAP_CONTENT
+                  );
+              }
+
+              private int dp(int value) {
+                  float density = getResources().getDisplayMetrics().density;
+                  return Math.round(value * density);
+              }
+          }
+          EOF
+
+          cat > app/src/main/java/com/sabafit/timer/WorkoutActivity.java <<'EOF'
+          package com.sabafit.timer;
+
+          import android.app.Activity;
+          import android.content.Intent;
+          import android.graphics.Color;
+          import android.graphics.Typeface;
+          import android.media.AudioAttributes;
+          import android.media.SoundPool;
+          import android.os.Bundle;
+          import android.os.CountDownTimer;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.view.Gravity;
+          import android.view.View;
+          import android.view.WindowManager;
+          import android.widget.Button;
+          import android.widget.ImageView;
+          import android.widget.LinearLayout;
+          import android.widget.TextView;
+
+          import java.util.ArrayList;
           import java.util.Locale;
 
-          public class MainActivity extends Activity {
+          public class WorkoutActivity extends Activity {
+
+              private static final int BG = Color.rgb(7, 23, 41);
+              private static final int CARD = Color.rgb(13, 31, 54);
+              private static final int ORANGE = Color.rgb(255, 132, 0);
+              private static final int WHITE = Color.WHITE;
+              private static final int LIGHT = Color.rgb(225, 232, 238);
+              private static final int SOFT = Color.rgb(155, 175, 190);
+              private static final int MINT = Color.rgb(86, 233, 179);
+              private static final int RED = Color.rgb(245, 90, 90);
 
               private final Handler handler = new Handler(Looper.getMainLooper());
 
@@ -184,23 +579,17 @@ jobs:
               private TextView timerText;
               private TextView exerciseText;
               private TextView progressText;
+              private TextView nextText;
 
-              private EditText workInput;
-              private EditText restInput;
-              private EditText setsInput;
-              private EditText roundsInput;
-              private EditText roundRestInput;
-              private EditText exerciseCountInput;
-
-              private Button applyExercisesButton;
               private Button startPauseButton;
               private Button resetButton;
-
-              private LinearLayout exerciseFieldsContainer;
-              private final List<EditText> exerciseInputs = new ArrayList<>();
-              private final List<String> exerciseNames = new ArrayList<>();
+              private Button backButton;
 
               private ExerciseSketchView sketchView;
+
+              private SoundPool soundPool;
+              private int whistleSoundId = 0;
+              private boolean whistleLoaded = false;
 
               private CountDownTimer timer;
               private long remainingMs = 0;
@@ -209,38 +598,49 @@ jobs:
               private boolean started = false;
               private boolean paused = false;
 
-              private int workSeconds = 100;
-              private int restSeconds = 20;
-              private int totalSets = 3;
-              private int totalRounds = 2;
-              private int roundRestSeconds = 180;
-              private int exerciseCount = 3;
+              private int workSeconds;
+              private int restSeconds;
+              private int totalSets;
+              private int totalRounds;
+              private int roundRestSeconds;
+              private int exerciseCount;
+
+              private ArrayList<String> exerciseNames;
 
               private int currentExercise = 0;
               private int currentSet = 1;
               private int currentRound = 1;
-
-              private SoundPool soundPool;
-              private int whistleSoundId = 0;
-              private boolean whistleLoaded = false;
-
-              private static final int BG = Color.rgb(7, 23, 41);
-              private static final int CARD = Color.rgb(13, 31, 54);
-              private static final int ORANGE = Color.rgb(255, 132, 0);
-              private static final int MINT = Color.rgb(86, 233, 179);
-              private static final int WHITE = Color.WHITE;
-              private static final int LIGHT = Color.rgb(220, 228, 235);
-              private static final int SOFT = Color.rgb(160, 175, 190);
 
               @Override
               protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
                   getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
+                  readExtras();
                   initSound();
                   buildInterface();
-                  generateExerciseInputs(3);
                   showIdle();
+              }
+
+              private void readExtras() {
+                  Intent intent = getIntent();
+
+                  exerciseCount = intent.getIntExtra("exerciseCount", 3);
+                  workSeconds = intent.getIntExtra("work", 100);
+                  restSeconds = intent.getIntExtra("rest", 20);
+                  totalSets = intent.getIntExtra("sets", 3);
+                  totalRounds = intent.getIntExtra("rounds", 2);
+                  roundRestSeconds = intent.getIntExtra("roundRest", 180);
+
+                  exerciseNames = intent.getStringArrayListExtra("exerciseNames");
+                  if (exerciseNames == null || exerciseNames.isEmpty()) {
+                      exerciseNames = new ArrayList<>();
+                      exerciseNames.add("Burpee");
+                      exerciseNames.add("Lift");
+                      exerciseNames.add("Push Press");
+                  }
+
+                  exerciseCount = exerciseNames.size();
               }
 
               private void initSound() {
@@ -262,287 +662,118 @@ jobs:
               }
 
               private void buildInterface() {
-                  ScrollView scrollView = new ScrollView(this);
-                  scrollView.setFillViewport(true);
-
                   LinearLayout root = new LinearLayout(this);
                   root.setOrientation(LinearLayout.VERTICAL);
-                  root.setPadding(dp(18), dp(18), dp(18), dp(26));
                   root.setBackgroundColor(BG);
+                  root.setPadding(dp(16), dp(16), dp(16), dp(20));
 
-                  root.addView(makeHeaderCard());
+                  LinearLayout header = new LinearLayout(this);
+                  header.setOrientation(LinearLayout.HORIZONTAL);
+                  header.setBackgroundColor(CARD);
+                  header.setPadding(dp(14), dp(12), dp(14), dp(12));
+                  header.setGravity(Gravity.CENTER_VERTICAL);
 
-                  phaseText = makeText("READY", 24, MINT, true);
+                  ImageView logo = new ImageView(this);
+                  logo.setImageResource(R.drawable.sabafit_logo);
+                  logo.setAdjustViewBounds(true);
+                  logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+                  LinearLayout.LayoutParams logoParams =
+                          new LinearLayout.LayoutParams(dp(72), dp(72));
+                  header.addView(logo, logoParams);
+
+                  LinearLayout titles = new LinearLayout(this);
+                  titles.setOrientation(LinearLayout.VERTICAL);
+                  LinearLayout.LayoutParams titlesParams =
+                          new LinearLayout.LayoutParams(
+                                  0,
+                                  LinearLayout.LayoutParams.WRAP_CONTENT,
+                                  1f
+                          );
+                  titlesParams.leftMargin = dp(12);
+
+                  TextView brandFa = makeText("صبا فیت", 22, ORANGE, true);
+                  TextView brandEn = makeText("SABAFIT TIMER", 16, WHITE, true);
+                  TextView slogan = makeText("حرکت | سلامتی | قدرت", 12, LIGHT, false);
+
+                  titles.addView(brandFa);
+                  titles.addView(brandEn);
+                  titles.addView(slogan);
+
+                  header.addView(titles, titlesParams);
+
+                  root.addView(header, fullWidth());
+
+                  phaseText = makeText("READY", 28, MINT, true);
                   phaseText.setGravity(Gravity.CENTER_HORIZONTAL);
                   LinearLayout.LayoutParams phaseParams = fullWidth();
                   phaseParams.topMargin = dp(18);
                   root.addView(phaseText, phaseParams);
 
-                  timerText = makeText("00:00", 58, WHITE, true);
+                  timerText = makeText("00:00", 68, WHITE, true);
                   timerText.setGravity(Gravity.CENTER_HORIZONTAL);
                   root.addView(timerText, fullWidth());
 
-                  exerciseText = makeText("EXERCISE 1", 22, WHITE, true);
+                  exerciseText = makeText(firstExercise().toUpperCase(Locale.ROOT), 25, WHITE, true);
                   exerciseText.setGravity(Gravity.CENTER_HORIZONTAL);
                   root.addView(exerciseText, fullWidth());
 
-                  progressText = makeText("EX 1/3   SET 1/3   ROUND 1/2", 14, LIGHT, false);
+                  progressText = makeText("", 16, LIGHT, false);
                   progressText.setGravity(Gravity.CENTER_HORIZONTAL);
                   LinearLayout.LayoutParams progressParams = fullWidth();
-                  progressParams.bottomMargin = dp(14);
+                  progressParams.topMargin = dp(4);
                   root.addView(progressText, progressParams);
+
+                  nextText = makeText("", 14, SOFT, false);
+                  nextText.setGravity(Gravity.CENTER_HORIZONTAL);
+                  LinearLayout.LayoutParams nextParams = fullWidth();
+                  nextParams.topMargin = dp(8);
+                  nextParams.bottomMargin = dp(12);
+                  root.addView(nextText, nextParams);
 
                   sketchView = new ExerciseSketchView(this);
                   LinearLayout.LayoutParams sketchParams =
                           new LinearLayout.LayoutParams(
                                   LinearLayout.LayoutParams.MATCH_PARENT,
-                                  dp(210)
+                                  0,
+                                  1f
                           );
-                  sketchParams.bottomMargin = dp(18);
                   root.addView(sketchView, sketchParams);
 
-                  root.addView(makeSettingsCard());
+                  LinearLayout buttonRow = new LinearLayout(this);
+                  buttonRow.setOrientation(LinearLayout.VERTICAL);
 
                   startPauseButton = makePrimaryButton("START");
-                  LinearLayout.LayoutParams startParams = fullWidth();
-                  startParams.topMargin = dp(18);
-                  root.addView(startPauseButton, startParams);
+                  buttonRow.addView(startPauseButton, fullWidth());
 
                   resetButton = makeSecondaryButton("RESET");
                   LinearLayout.LayoutParams resetParams = fullWidth();
                   resetParams.topMargin = dp(10);
-                  root.addView(resetButton, resetParams);
+                  buttonRow.addView(resetButton, resetParams);
 
-                  TextView footer = makeText(
-                          "Coach whistle • Dynamic exercises (1 to 10) • Editable exercise names",
-                          12,
-                          SOFT,
-                          false
-                  );
-                  footer.setGravity(Gravity.CENTER_HORIZONTAL);
-                  LinearLayout.LayoutParams footerParams = fullWidth();
-                  footerParams.topMargin = dp(16);
-                  root.addView(footer, footerParams);
+                  backButton = makeDangerButton("BACK TO SETTINGS");
+                  LinearLayout.LayoutParams backParams = fullWidth();
+                  backParams.topMargin = dp(10);
+                  buttonRow.addView(backButton, backParams);
 
-                  scrollView.addView(root);
-                  setContentView(scrollView);
+                  LinearLayout.LayoutParams buttonRowParams = fullWidth();
+                  buttonRowParams.topMargin = dp(16);
+                  root.addView(buttonRow, buttonRowParams);
 
-                  applyExercisesButton.setOnClickListener(v -> applyExerciseCountFromField());
+                  setContentView(root);
+
                   startPauseButton.setOnClickListener(v -> handleStartPause());
                   resetButton.setOnClickListener(v -> resetWorkout());
-              }
-
-              private View makeHeaderCard() {
-                  LinearLayout card = new LinearLayout(this);
-                  card.setOrientation(LinearLayout.VERTICAL);
-                  card.setBackgroundColor(CARD);
-                  card.setPadding(dp(18), dp(18), dp(18), dp(16));
-
-                  TextView brandFa = makeText("صبا فیت", 28, ORANGE, true);
-                  brandFa.setGravity(Gravity.CENTER_HORIZONTAL);
-                  card.addView(brandFa, fullWidth());
-
-                  TextView brandEn = makeText("SABAFIT TIMER", 18, WHITE, true);
-                  brandEn.setGravity(Gravity.CENTER_HORIZONTAL);
-                  card.addView(brandEn, fullWidth());
-
-                  TextView slogan = makeText("حرکت  |  سلامتی  |  قدرت", 14, LIGHT, false);
-                  slogan.setGravity(Gravity.CENTER_HORIZONTAL);
-                  LinearLayout.LayoutParams sloganParams = fullWidth();
-                  sloganParams.topMargin = dp(6);
-                  card.addView(slogan, sloganParams);
-
-                  return card;
-              }
-
-              private View makeSettingsCard() {
-                  LinearLayout card = new LinearLayout(this);
-                  card.setOrientation(LinearLayout.VERTICAL);
-                  card.setBackgroundColor(CARD);
-                  card.setPadding(dp(16), dp(16), dp(16), dp(16));
-
-                  exerciseCountInput = addLabeledNumberInput(
-                          card,
-                          "Number of exercises (1 to 10)",
-                          "3"
-                  );
-
-                  applyExercisesButton = makeSecondaryButton("APPLY EXERCISE COUNT");
-                  LinearLayout.LayoutParams applyParams = fullWidth();
-                  applyParams.topMargin = dp(8);
-                  applyParams.bottomMargin = dp(10);
-                  card.addView(applyExercisesButton, applyParams);
-
-                  workInput = addLabeledNumberInput(
-                          card,
-                          "Exercise time (seconds)",
-                          "100"
-                  );
-
-                  restInput = addLabeledNumberInput(
-                          card,
-                          "Rest between exercises (seconds)",
-                          "20"
-                  );
-
-                  setsInput = addLabeledNumberInput(
-                          card,
-                          "Sets",
-                          "3"
-                  );
-
-                  roundsInput = addLabeledNumberInput(
-                          card,
-                          "Rounds",
-                          "2"
-                  );
-
-                  roundRestInput = addLabeledNumberInput(
-                          card,
-                          "Rest between rounds (seconds)",
-                          "180"
-                  );
-
-                  TextView exTitle = makeText("Exercise names", 18, WHITE, true);
-                  LinearLayout.LayoutParams titleParams = fullWidth();
-                  titleParams.topMargin = dp(12);
-                  titleParams.bottomMargin = dp(8);
-                  card.addView(exTitle, titleParams);
-
-                  HorizontalScrollView hsv = new HorizontalScrollView(this);
-                  hsv.setFillViewport(true);
-
-                  exerciseFieldsContainer = new LinearLayout(this);
-                  exerciseFieldsContainer.setOrientation(LinearLayout.VERTICAL);
-
-                  hsv.addView(
-                          exerciseFieldsContainer,
-                          new ViewGroup.LayoutParams(
-                                  ViewGroup.LayoutParams.MATCH_PARENT,
-                                  ViewGroup.LayoutParams.WRAP_CONTENT
-                          )
-                  );
-
-                  card.addView(
-                          hsv,
-                          new LinearLayout.LayoutParams(
-                                  LinearLayout.LayoutParams.MATCH_PARENT,
-                                  LinearLayout.LayoutParams.WRAP_CONTENT
-                          )
-                  );
-
-                  return card;
-              }
-
-              private EditText addLabeledNumberInput(
-                      LinearLayout parent,
-                      String label,
-                      String value
-              ) {
-                  TextView tv = makeText(label, 14, LIGHT, false);
-                  LinearLayout.LayoutParams tvParams = fullWidth();
-                  tvParams.topMargin = dp(6);
-                  parent.addView(tv, tvParams);
-
-                  EditText e = new EditText(this);
-                  e.setText(value);
-                  e.setInputType(InputType.TYPE_CLASS_NUMBER);
-                  e.setTextColor(WHITE);
-                  e.setHintTextColor(SOFT);
-                  e.setSingleLine(true);
-                  e.setPadding(dp(14), dp(12), dp(14), dp(12));
-                  e.setBackgroundColor(Color.rgb(18, 42, 71));
-
-                  LinearLayout.LayoutParams p = fullWidth();
-                  p.topMargin = dp(4);
-                  p.bottomMargin = dp(4);
-                  parent.addView(e, p);
-
-                  return e;
-              }
-
-              private void generateExerciseInputs(int count) {
-                  exerciseFieldsContainer.removeAllViews();
-                  exerciseInputs.clear();
-
-                  String[] defaults = new String[] {
-                          "Burpee", "Lift", "Push Press", "Squat", "Push-up",
-                          "Lunge", "Plank", "Deadlift", "Jumping Jack", "Sit-up"
-                  };
-
-                  for (int i = 0; i < count; i++) {
-                      TextView tv = makeText("Exercise " + (i + 1), 13, LIGHT, false);
-                      LinearLayout.LayoutParams tvParams = fullWidth();
-                      tvParams.topMargin = dp(4);
-                      exerciseFieldsContainer.addView(tv, tvParams);
-
-                      EditText e = new EditText(this);
-                      e.setText(defaults[i]);
-                      e.setHint("Enter exercise name");
-                      e.setTextColor(WHITE);
-                      e.setHintTextColor(SOFT);
-                      e.setSingleLine(true);
-                      e.setPadding(dp(14), dp(12), dp(14), dp(12));
-                      e.setBackgroundColor(Color.rgb(18, 42, 71));
-
-                      LinearLayout.LayoutParams p = fullWidth();
-                      p.topMargin = dp(4);
-                      p.bottomMargin = dp(6);
-                      exerciseFieldsContainer.addView(e, p);
-
-                      exerciseInputs.add(e);
-                  }
-
-                  if (!exerciseInputs.isEmpty()) {
-                      String first = safeExerciseName(exerciseInputs.get(0).getText().toString(), 1);
-                      exerciseText.setText(first.toUpperCase(Locale.ROOT));
-                      sketchView.setExerciseName(first);
-                      progressText.setText(
-                              String.format(Locale.US, "EX 1/%d   SET 1/3   ROUND 1/2", count)
-                      );
-                  }
-              }
-
-              private void applyExerciseCountFromField() {
-                  try {
-                      int count = Integer.parseInt(exerciseCountInput.getText().toString().trim());
-
-                      if (count < 1 || count > 10) {
-                          throw new RuntimeException();
-                      }
-
-                      exerciseCount = count;
-                      generateExerciseInputs(count);
-
-                      Toast.makeText(
-                              this,
-                              "Exercise fields updated: " + count,
-                              Toast.LENGTH_SHORT
-                      ).show();
-
-                  } catch (Exception ex) {
-                      Toast.makeText(
-                              this,
-                              "Exercise count must be between 1 and 10.",
-                              Toast.LENGTH_LONG
-                      ).show();
-                  }
+                  backButton.setOnClickListener(v -> finish());
               }
 
               private void handleStartPause() {
                   if (!started) {
-                      if (!readSettings()) return;
-
                       started = true;
                       paused = false;
-
                       currentExercise = 0;
                       currentSet = 1;
                       currentRound = 1;
-
-                      disableInputs(true);
                       startReady();
-
                   } else if (!paused) {
                       pauseWorkout();
                   } else {
@@ -550,73 +781,30 @@ jobs:
                   }
               }
 
-              private boolean readSettings() {
-                  try {
-                      workSeconds = parsePositive(workInput, 1, 3600);
-                      restSeconds = parsePositive(restInput, 0, 3600);
-                      totalSets = parsePositive(setsInput, 1, 100);
-                      totalRounds = parsePositive(roundsInput, 1, 100);
-                      roundRestSeconds = parsePositive(roundRestInput, 0, 3600);
-                      exerciseCount = parsePositive(exerciseCountInput, 1, 10);
-
-                      if (exerciseInputs.size() != exerciseCount) {
-                          generateExerciseInputs(exerciseCount);
-                      }
-
-                      exerciseNames.clear();
-                      for (int i = 0; i < exerciseCount; i++) {
-                          String raw = exerciseInputs.get(i).getText().toString().trim();
-                          exerciseNames.add(safeExerciseName(raw, i + 1));
-                      }
-
-                      return true;
-
-                  } catch (Exception ex) {
-                      Toast.makeText(
-                              this,
-                              "Please check all settings.",
-                              Toast.LENGTH_LONG
-                      ).show();
-                      return false;
-                  }
-              }
-
-              private int parsePositive(EditText editText, int min, int max) {
-                  int value = Integer.parseInt(editText.getText().toString().trim());
-                  if (value < min || value > max) throw new RuntimeException();
-                  return value;
-              }
-
-              private String safeExerciseName(String raw, int number) {
-                  if (raw == null || raw.trim().isEmpty()) {
-                      return "Exercise " + number;
-                  }
-                  return raw.trim();
-              }
-
               private void startReady() {
-                  handler.removeCallbacksAndMessages(null);
-
                   phaseText.setText("READY");
-                  timerText.setText("00:03");
-                  exerciseText.setText(exerciseNames.get(0).toUpperCase(Locale.ROOT));
-                  sketchView.setExerciseName(exerciseNames.get(0));
+                  phaseText.setTextColor(MINT);
+                  exerciseText.setText(firstExercise().toUpperCase(Locale.ROOT));
+                  sketchView.setExerciseName(firstExercise());
+                  nextText.setText("شروع با: " + firstExercise());
                   updateProgress();
-
                   tripleWhistle();
-
                   runTimer(3000, this::startWork);
               }
 
               private void startWork() {
                   phaseText.setText("WORK");
-                  String currentName = exerciseNames.get(currentExercise);
+                  phaseText.setTextColor(MINT);
 
+                  String currentName = exerciseNames.get(currentExercise);
                   exerciseText.setText(currentName.toUpperCase(Locale.ROOT));
                   sketchView.setExerciseName(currentName);
+
+                  String next = getNextExerciseName();
+                  nextText.setText(next == null ? "آخرین بخش این راند" : "بعدی: " + next);
+
                   updateProgress();
                   whistle();
-
                   runTimer(workSeconds * 1000L, this::workFinished);
               }
 
@@ -625,14 +813,14 @@ jobs:
 
                   if (currentExercise < exerciseCount - 1) {
                       currentExercise++;
-                      startExerciseRest(() -> startWork());
+                      startExerciseRest();
                       return;
                   }
 
                   if (currentSet < totalSets) {
                       currentSet++;
                       currentExercise = 0;
-                      startExerciseRest(() -> startWork());
+                      startExerciseRest();
                       return;
                   }
 
@@ -647,26 +835,101 @@ jobs:
                   finishWorkout();
               }
 
-              private void startExerciseRest(Runnable nextAction) {
+              private void startExerciseRest() {
                   phaseText.setText("REST");
-                  String nextName = exerciseNames.get(currentExercise);
+                  phaseText.setTextColor(ORANGE);
 
+                  String nextName = exerciseNames.get(currentExercise);
                   exerciseText.setText(("NEXT: " + nextName).toUpperCase(Locale.ROOT));
                   sketchView.setExerciseName(nextName);
-                  updateProgress();
+                  nextText.setText("آماده شو برای: " + nextName);
 
-                  runTimer(restSeconds * 1000L, nextAction);
+                  updateProgress();
+                  runTimer(restSeconds * 1000L, this::startWork);
               }
 
               private void startRoundRest() {
                   phaseText.setText("ROUND REST");
-                  String nextName = exerciseNames.get(0);
+                  phaseText.setTextColor(ORANGE);
 
-                  exerciseText.setText(("NEXT ROUND: " + nextName).toUpperCase(Locale.ROOT));
+                  String nextName = firstExercise();
+                  exerciseText.setText(("ROUND " + currentRound).toUpperCase(Locale.ROOT));
                   sketchView.setExerciseName(nextName);
-                  updateProgress();
+                  nextText.setText("شروع راند بعدی با: " + nextName);
 
+                  updateProgress();
                   runTimer(roundRestSeconds * 1000L, this::startWork);
+              }
+
+              private void finishWorkout() {
+                  started = false;
+                  paused = false;
+
+                  if (timer != null) timer.cancel();
+                  remainingMs = 0;
+
+                  phaseText.setText("COMPLETE");
+                  phaseText.setTextColor(MINT);
+                  timerText.setText("00:00");
+                  exerciseText.setText("GREAT JOB!");
+                  nextText.setText("تمرین با موفقیت به پایان رسید");
+                  sketchView.setExerciseName("done");
+                  startPauseButton.setText("START");
+
+                  tripleWhistle();
+              }
+
+              private void pauseWorkout() {
+                  if (timer != null) timer.cancel();
+                  paused = true;
+                  phaseText.setText("PAUSED");
+                  phaseText.setTextColor(RED);
+                  startPauseButton.setText("RESUME");
+              }
+
+              private void resumeWorkout() {
+                  paused = false;
+                  runTimer(remainingMs, finishAction);
+              }
+
+              private void resetWorkout() {
+                  if (timer != null) timer.cancel();
+                  handler.removeCallbacksAndMessages(null);
+
+                  started = false;
+                  paused = false;
+                  remainingMs = 0;
+                  currentExercise = 0;
+                  currentSet = 1;
+                  currentRound = 1;
+
+                  startPauseButton.setText("START");
+                  showIdle();
+              }
+
+              private void showIdle() {
+                  phaseText.setText("READY");
+                  phaseText.setTextColor(MINT);
+                  timerText.setText("00:00");
+                  exerciseText.setText(firstExercise().toUpperCase(Locale.ROOT));
+                  nextText.setText("برای شروع، دکمه START را بزن");
+                  sketchView.setExerciseName(firstExercise());
+                  updateProgress();
+              }
+
+              private void updateProgress() {
+                  progressText.setText(
+                          String.format(
+                                  Locale.US,
+                                  "EX %d/%d   SET %d/%d   ROUND %d/%d",
+                                  currentExercise + 1,
+                                  exerciseCount,
+                                  currentSet,
+                                  totalSets,
+                                  currentRound,
+                                  totalRounds
+                          )
+                  );
               }
 
               private void runTimer(long durationMs, Runnable whenFinished) {
@@ -701,82 +964,6 @@ jobs:
                   startPauseButton.setText("PAUSE");
               }
 
-              private void pauseWorkout() {
-                  if (timer != null) timer.cancel();
-
-                  paused = true;
-                  phaseText.setText("PAUSED");
-                  startPauseButton.setText("RESUME");
-              }
-
-              private void resumeWorkout() {
-                  paused = false;
-                  runTimer(remainingMs, finishAction);
-              }
-
-              private void finishWorkout() {
-                  started = false;
-                  paused = false;
-
-                  if (timer != null) timer.cancel();
-                  timerText.setText("00:00");
-                  phaseText.setText("WORKOUT COMPLETE");
-                  exerciseText.setText("GREAT JOB!");
-                  sketchView.setExerciseName("done");
-                  startPauseButton.setText("START");
-
-                  disableInputs(false);
-                  tripleWhistle();
-              }
-
-              private void resetWorkout() {
-                  if (timer != null) timer.cancel();
-
-                  handler.removeCallbacksAndMessages(null);
-
-                  started = false;
-                  paused = false;
-                  remainingMs = 0;
-                  currentExercise = 0;
-                  currentSet = 1;
-                  currentRound = 1;
-
-                  disableInputs(false);
-                  startPauseButton.setText("START");
-                  showIdle();
-              }
-
-              private void showIdle() {
-                  phaseText.setText("READY");
-                  timerText.setText("00:00");
-
-                  String firstName = exerciseInputs.isEmpty()
-                          ? "Exercise 1"
-                          : safeExerciseName(exerciseInputs.get(0).getText().toString(), 1);
-
-                  exerciseText.setText(firstName.toUpperCase(Locale.ROOT));
-                  sketchView.setExerciseName(firstName);
-
-                  progressText.setText(
-                          String.format(Locale.US, "EX 1/%d   SET 1/3   ROUND 1/2", Math.max(1, exerciseInputs.size()))
-                  );
-              }
-
-              private void updateProgress() {
-                  progressText.setText(
-                          String.format(
-                                  Locale.US,
-                                  "EX %d/%d   SET %d/%d   ROUND %d/%d",
-                                  currentExercise + 1,
-                                  exerciseCount,
-                                  currentSet,
-                                  totalSets,
-                                  currentRound,
-                                  totalRounds
-                          )
-                  );
-              }
-
               private void displayTime(long seconds) {
                   long min = seconds / 60;
                   long sec = seconds % 60;
@@ -791,43 +978,43 @@ jobs:
 
               private void tripleWhistle() {
                   whistle();
-                  handler.postDelayed(this::whistle, 900);
-                  handler.postDelayed(this::whistle, 1800);
+                  handler.postDelayed(this::whistle, 1000);
+                  handler.postDelayed(this::whistle, 2000);
               }
 
-              private void disableInputs(boolean disabled) {
-                  boolean enabled = !disabled;
+              private String firstExercise() {
+                  return exerciseNames.get(0);
+              }
 
-                  workInput.setEnabled(enabled);
-                  restInput.setEnabled(enabled);
-                  setsInput.setEnabled(enabled);
-                  roundsInput.setEnabled(enabled);
-                  roundRestInput.setEnabled(enabled);
-                  exerciseCountInput.setEnabled(enabled);
-                  applyExercisesButton.setEnabled(enabled);
-
-                  for (EditText e : exerciseInputs) {
-                      e.setEnabled(enabled);
+              private String getNextExerciseName() {
+                  if (currentExercise + 1 < exerciseCount) {
+                      return exerciseNames.get(currentExercise + 1);
                   }
+                  if (currentSet < totalSets) {
+                      return exerciseNames.get(0);
+                  }
+                  if (currentRound < totalRounds) {
+                      return exerciseNames.get(0);
+                  }
+                  return null;
               }
 
-              private TextView makeText(String text, int sizeSp, int color, boolean bold) {
+              private TextView makeText(String text, int size, int color, boolean bold) {
                   TextView t = new TextView(this);
                   t.setText(text);
-                  t.setTextSize(sizeSp);
+                  t.setTextSize(size);
                   t.setTextColor(color);
-                  if (bold) {
-                      t.setTypeface(t.getTypeface(), android.graphics.Typeface.BOLD);
-                  }
+                  if (bold) t.setTypeface(Typeface.DEFAULT_BOLD);
                   return t;
               }
 
               private Button makePrimaryButton(String text) {
                   Button b = new Button(this);
                   b.setText(text);
-                  b.setTextSize(20);
                   b.setAllCaps(true);
                   b.setTextColor(BG);
+                  b.setTextSize(18);
+                  b.setTypeface(Typeface.DEFAULT_BOLD);
                   b.setBackgroundColor(MINT);
                   b.setPadding(dp(10), dp(14), dp(10), dp(14));
                   return b;
@@ -836,10 +1023,23 @@ jobs:
               private Button makeSecondaryButton(String text) {
                   Button b = new Button(this);
                   b.setText(text);
-                  b.setTextSize(16);
                   b.setAllCaps(true);
                   b.setTextColor(WHITE);
-                  b.setBackgroundColor(Color.rgb(26, 52, 84));
+                  b.setTextSize(16);
+                  b.setTypeface(Typeface.DEFAULT_BOLD);
+                  b.setBackgroundColor(Color.rgb(28, 56, 90));
+                  b.setPadding(dp(10), dp(12), dp(10), dp(12));
+                  return b;
+              }
+
+              private Button makeDangerButton(String text) {
+                  Button b = new Button(this);
+                  b.setText(text);
+                  b.setAllCaps(true);
+                  b.setTextColor(WHITE);
+                  b.setTextSize(15);
+                  b.setTypeface(Typeface.DEFAULT_BOLD);
+                  b.setBackgroundColor(Color.rgb(92, 36, 36));
                   b.setPadding(dp(10), dp(12), dp(10), dp(12));
                   return b;
               }
@@ -859,209 +1059,236 @@ jobs:
               @Override
               protected void onDestroy() {
                   super.onDestroy();
-
                   if (timer != null) timer.cancel();
                   handler.removeCallbacksAndMessages(null);
-
                   if (soundPool != null) {
                       soundPool.release();
                       soundPool = null;
                   }
               }
+          }
+          EOF
 
-              private class ExerciseSketchView extends View {
+          cat > app/src/main/java/com/sabafit/timer/ExerciseSketchView.java <<'EOF'
+          package com.sabafit.timer;
 
-                  private final Paint borderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-                  private final Paint linePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-                  private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-                  private final Paint accentPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+          import android.content.Context;
+          import android.graphics.Canvas;
+          import android.graphics.Color;
+          import android.graphics.Paint;
+          import android.graphics.RectF;
+          import android.view.View;
 
-                  private String exerciseName = "exercise";
+          import java.util.Locale;
 
-                  public ExerciseSketchView(Activity context) {
-                      super(context);
+          public class ExerciseSketchView extends View {
 
-                      borderPaint.setStyle(Paint.Style.STROKE);
-                      borderPaint.setStrokeWidth(dp(2));
-                      borderPaint.setColor(Color.rgb(38, 72, 112));
+              private static final int WHITE = Color.WHITE;
+              private static final int SOFT = Color.rgb(160, 175, 190);
 
-                      linePaint.setStyle(Paint.Style.STROKE);
-                      linePaint.setStrokeWidth(dp(4));
-                      linePaint.setStrokeCap(Paint.Cap.ROUND);
-                      linePaint.setColor(WHITE);
+              private final Paint borderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+              private final Paint linePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+              private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+              private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-                      accentPaint.setStyle(Paint.Style.FILL);
-                      accentPaint.setColor(Color.argb(28, 255, 132, 0));
+              private String exerciseName = "exercise";
 
-                      textPaint.setColor(SOFT);
-                      textPaint.setTextSize(dp(8));
-                      textPaint.setTextAlign(Paint.Align.CENTER);
+              public ExerciseSketchView(Context context) {
+                  super(context);
+
+                  borderPaint.setStyle(Paint.Style.STROKE);
+                  borderPaint.setStrokeWidth(dp(2));
+                  borderPaint.setColor(Color.rgb(38, 72, 112));
+
+                  fillPaint.setStyle(Paint.Style.FILL);
+                  fillPaint.setColor(Color.rgb(34, 34, 40));
+
+                  linePaint.setStyle(Paint.Style.STROKE);
+                  linePaint.setStrokeWidth(dp(4));
+                  linePaint.setStrokeCap(Paint.Cap.ROUND);
+                  linePaint.setColor(WHITE);
+
+                  textPaint.setColor(SOFT);
+                  textPaint.setTextSize(dp(8));
+                  textPaint.setTextAlign(Paint.Align.CENTER);
+              }
+
+              public void setExerciseName(String name) {
+                  if (name == null || name.trim().isEmpty()) {
+                      exerciseName = "exercise";
+                  } else {
+                      exerciseName = name.trim().toLowerCase(Locale.ROOT);
                   }
+                  invalidate();
+              }
 
-                  public void setExerciseName(String name) {
-                      if (name == null) {
-                          exerciseName = "exercise";
-                      } else {
-                          exerciseName = name.trim().toLowerCase(Locale.ROOT);
-                      }
-                      invalidate();
+              @Override
+              protected void onDraw(Canvas canvas) {
+                  super.onDraw(canvas);
+
+                  float w = getWidth();
+                  float h = getHeight();
+
+                  RectF card = new RectF(dp(4), dp(4), w - dp(4), h - dp(4));
+                  canvas.drawRoundRect(card, dp(18), dp(18), fillPaint);
+                  canvas.drawRoundRect(card, dp(18), dp(18), borderPaint);
+
+                  canvas.drawText(
+                          exerciseName.toUpperCase(Locale.ROOT),
+                          w / 2f,
+                          dp(22),
+                          textPaint
+                  );
+
+                  if (exerciseName.contains("burpee") || exerciseName.contains("برپی")) {
+                      drawBurpee(canvas, w, h);
+                  } else if (exerciseName.contains("squat") || exerciseName.contains("اسکات")) {
+                      drawSquat(canvas, w, h);
+                  } else if (
+                          exerciseName.contains("push") ||
+                          exerciseName.contains("شنا")
+                  ) {
+                      drawPush(canvas, w, h);
+                  } else if (exerciseName.contains("lunge") || exerciseName.contains("لانج")) {
+                      drawLunge(canvas, w, h);
+                  } else if (exerciseName.contains("plank") || exerciseName.contains("پلانک")) {
+                      drawPlank(canvas, w, h);
+                  } else if (exerciseName.contains("deadlift") || exerciseName.contains("دد")) {
+                      drawDeadlift(canvas, w, h);
+                  } else if (exerciseName.contains("press") || exerciseName.contains("پرس")) {
+                      drawPress(canvas, w, h);
+                  } else if (
+                          exerciseName.contains("sit") ||
+                          exerciseName.contains("crunch") ||
+                          exerciseName.contains("دراز")
+                  ) {
+                      drawSitup(canvas, w, h);
+                  } else if (exerciseName.contains("jump") || exerciseName.contains("جامپ")) {
+                      drawJumpingJack(canvas, w, h);
+                  } else if (exerciseName.contains("done")) {
+                      drawDone(canvas, w, h);
+                  } else {
+                      drawGeneric(canvas, w, h);
                   }
+              }
 
-                  @Override
-                  protected void onDraw(Canvas canvas) {
-                      super.onDraw(canvas);
+              private void drawHead(Canvas c, float x, float y, float r) {
+                  c.drawCircle(x, y, r, linePaint);
+              }
 
-                      float w = getWidth();
-                      float h = getHeight();
+              private void drawBurpee(Canvas c, float w, float h) {
+                  drawHead(c, w * 0.30f, h * 0.34f, dp(12));
+                  c.drawLine(w * 0.30f, h * 0.40f, w * 0.30f, h * 0.56f, linePaint);
+                  c.drawLine(w * 0.30f, h * 0.45f, w * 0.22f, h * 0.52f, linePaint);
+                  c.drawLine(w * 0.30f, h * 0.45f, w * 0.38f, h * 0.52f, linePaint);
+                  c.drawLine(w * 0.30f, h * 0.56f, w * 0.24f, h * 0.70f, linePaint);
+                  c.drawLine(w * 0.30f, h * 0.56f, w * 0.36f, h * 0.70f, linePaint);
 
-                      RectF card = new RectF(dp(4), dp(4), w - dp(4), h - dp(4));
-                      canvas.drawRoundRect(card, dp(16), dp(16), accentPaint);
-                      canvas.drawRoundRect(card, dp(16), dp(16), borderPaint);
+                  drawHead(c, w * 0.72f, h * 0.48f, dp(12));
+                  c.drawLine(w * 0.68f, h * 0.55f, w * 0.46f, h * 0.62f, linePaint);
+                  c.drawLine(w * 0.68f, h * 0.55f, w * 0.84f, h * 0.60f, linePaint);
+                  c.drawLine(w * 0.52f, h * 0.62f, w * 0.42f, h * 0.72f, linePaint);
+                  c.drawLine(w * 0.52f, h * 0.62f, w * 0.68f, h * 0.72f, linePaint);
+              }
 
-                      String title = exerciseName == null || exerciseName.isEmpty()
-                              ? "exercise"
-                              : exerciseName.toUpperCase(Locale.ROOT);
-                      canvas.drawText(title, w / 2f, dp(24), textPaint);
+              private void drawSquat(Canvas c, float w, float h) {
+                  float x = w * 0.50f;
+                  drawHead(c, x, h * 0.26f, dp(13));
+                  c.drawLine(x, h * 0.32f, x, h * 0.52f, linePaint);
+                  c.drawLine(x, h * 0.38f, x - dp(36), h * 0.44f, linePaint);
+                  c.drawLine(x, h * 0.38f, x + dp(36), h * 0.44f, linePaint);
+                  c.drawLine(x, h * 0.52f, x - dp(34), h * 0.62f, linePaint);
+                  c.drawLine(x - dp(34), h * 0.62f, x - dp(16), h * 0.74f, linePaint);
+                  c.drawLine(x, h * 0.52f, x + dp(34), h * 0.62f, linePaint);
+                  c.drawLine(x + dp(34), h * 0.62f, x + dp(16), h * 0.74f, linePaint);
+              }
 
-                      if (exerciseName.contains("burpee") || exerciseName.contains("برپی")) {
-                          drawBurpee(canvas, w, h);
-                      } else if (exerciseName.contains("squat") || exerciseName.contains("اسکات")) {
-                          drawSquat(canvas, w, h);
-                      } else if (exerciseName.contains("push") || exerciseName.contains("شنا")) {
-                          drawPush(canvas, w, h);
-                      } else if (exerciseName.contains("lunge") || exerciseName.contains("لانج")) {
-                          drawLunge(canvas, w, h);
-                      } else if (exerciseName.contains("plank") || exerciseName.contains("پلانک")) {
-                          drawPlank(canvas, w, h);
-                      } else if (exerciseName.contains("deadlift") || exerciseName.contains("دد")) {
-                          drawDeadlift(canvas, w, h);
-                      } else if (exerciseName.contains("press") || exerciseName.contains("پرس")) {
-                          drawPress(canvas, w, h);
-                      } else if (exerciseName.contains("sit") || exerciseName.contains("crunch") || exerciseName.contains("دراز")) {
-                          drawSitup(canvas, w, h);
-                      } else if (exerciseName.contains("jump") || exerciseName.contains("جامپ")) {
-                          drawJumpingJack(canvas, w, h);
-                      } else if (exerciseName.contains("done")) {
-                          drawDone(canvas, w, h);
-                      } else {
-                          drawGeneric(canvas, w, h);
-                      }
-                  }
+              private void drawPush(Canvas c, float w, float h) {
+                  drawHead(c, w * 0.24f, h * 0.50f, dp(11));
+                  c.drawLine(w * 0.30f, h * 0.50f, w * 0.68f, h * 0.50f, linePaint);
+                  c.drawLine(w * 0.36f, h * 0.50f, w * 0.30f, h * 0.68f, linePaint);
+                  c.drawLine(w * 0.60f, h * 0.50f, w * 0.68f, h * 0.68f, linePaint);
+                  c.drawLine(w * 0.68f, h * 0.50f, w * 0.82f, h * 0.50f, linePaint);
+              }
 
-                  private void drawHead(Canvas c, float x, float y, float r) {
-                      c.drawCircle(x, y, r, linePaint);
-                  }
+              private void drawLunge(Canvas c, float w, float h) {
+                  float x = w * 0.48f;
+                  drawHead(c, x, h * 0.24f, dp(13));
+                  c.drawLine(x, h * 0.30f, x, h * 0.52f, linePaint);
+                  c.drawLine(x, h * 0.38f, x - dp(34), h * 0.46f, linePaint);
+                  c.drawLine(x, h * 0.38f, x + dp(36), h * 0.42f, linePaint);
+                  c.drawLine(x, h * 0.52f, x - dp(42), h * 0.66f, linePaint);
+                  c.drawLine(x - dp(42), h * 0.66f, x - dp(42), h * 0.78f, linePaint);
+                  c.drawLine(x, h * 0.52f, x + dp(30), h * 0.58f, linePaint);
+                  c.drawLine(x + dp(30), h * 0.58f, x + dp(52), h * 0.74f, linePaint);
+              }
 
-                  private void drawBurpee(Canvas c, float w, float h) {
-                      drawHead(c, w * 0.30f, h * 0.34f, dp(12));
-                      c.drawLine(w * 0.30f, h * 0.40f, w * 0.30f, h * 0.56f, linePaint);
-                      c.drawLine(w * 0.30f, h * 0.45f, w * 0.22f, h * 0.52f, linePaint);
-                      c.drawLine(w * 0.30f, h * 0.45f, w * 0.38f, h * 0.52f, linePaint);
-                      c.drawLine(w * 0.30f, h * 0.56f, w * 0.24f, h * 0.70f, linePaint);
-                      c.drawLine(w * 0.30f, h * 0.56f, w * 0.36f, h * 0.70f, linePaint);
+              private void drawPlank(Canvas c, float w, float h) {
+                  drawHead(c, w * 0.22f, h * 0.46f, dp(11));
+                  c.drawLine(w * 0.28f, h * 0.46f, w * 0.72f, h * 0.54f, linePaint);
+                  c.drawLine(w * 0.36f, h * 0.48f, w * 0.30f, h * 0.66f, linePaint);
+                  c.drawLine(w * 0.66f, h * 0.53f, w * 0.76f, h * 0.70f, linePaint);
+              }
 
-                      drawHead(c, w * 0.72f, h * 0.48f, dp(12));
-                      c.drawLine(w * 0.68f, h * 0.55f, w * 0.46f, h * 0.62f, linePaint);
-                      c.drawLine(w * 0.68f, h * 0.55f, w * 0.84f, h * 0.60f, linePaint);
-                      c.drawLine(w * 0.52f, h * 0.62f, w * 0.42f, h * 0.72f, linePaint);
-                      c.drawLine(w * 0.52f, h * 0.62f, w * 0.68f, h * 0.72f, linePaint);
-                  }
+              private void drawDeadlift(Canvas c, float w, float h) {
+                  float x = w * 0.50f;
+                  drawHead(c, x, h * 0.28f, dp(13));
+                  c.drawLine(x, h * 0.34f, x, h * 0.54f, linePaint);
+                  c.drawLine(x, h * 0.42f, x - dp(34), h * 0.58f, linePaint);
+                  c.drawLine(x, h * 0.42f, x + dp(34), h * 0.58f, linePaint);
+                  c.drawLine(x, h * 0.54f, x - dp(20), h * 0.72f, linePaint);
+                  c.drawLine(x, h * 0.54f, x + dp(18), h * 0.72f, linePaint);
+                  c.drawLine(w * 0.28f, h * 0.62f, w * 0.72f, h * 0.62f, linePaint);
+                  c.drawCircle(w * 0.22f, h * 0.62f, dp(10), linePaint);
+                  c.drawCircle(w * 0.78f, h * 0.62f, dp(10), linePaint);
+              }
 
-                  private void drawSquat(Canvas c, float w, float h) {
-                      float x = w * 0.50f;
-                      drawHead(c, x, h * 0.26f, dp(13));
-                      c.drawLine(x, h * 0.32f, x, h * 0.52f, linePaint);
-                      c.drawLine(x, h * 0.38f, x - dp(36), h * 0.44f, linePaint);
-                      c.drawLine(x, h * 0.38f, x + dp(36), h * 0.44f, linePaint);
-                      c.drawLine(x, h * 0.52f, x - dp(34), h * 0.62f, linePaint);
-                      c.drawLine(x - dp(34), h * 0.62f, x - dp(16), h * 0.74f, linePaint);
-                      c.drawLine(x, h * 0.52f, x + dp(34), h * 0.62f, linePaint);
-                      c.drawLine(x + dp(34), h * 0.62f, x + dp(16), h * 0.74f, linePaint);
-                  }
+              private void drawPress(Canvas c, float w, float h) {
+                  float x = w * 0.50f;
+                  drawHead(c, x, h * 0.30f, dp(13));
+                  c.drawLine(x, h * 0.36f, x, h * 0.60f, linePaint);
+                  c.drawLine(x, h * 0.60f, x - dp(24), h * 0.76f, linePaint);
+                  c.drawLine(x, h * 0.60f, x + dp(24), h * 0.76f, linePaint);
+                  c.drawLine(x - dp(22), h * 0.42f, x - dp(22), h * 0.22f, linePaint);
+                  c.drawLine(x + dp(22), h * 0.42f, x + dp(22), h * 0.22f, linePaint);
+                  c.drawLine(x - dp(44), h * 0.22f, x + dp(44), h * 0.22f, linePaint);
+              }
 
-                  private void drawPush(Canvas c, float w, float h) {
-                      drawHead(c, w * 0.24f, h * 0.50f, dp(11));
-                      c.drawLine(w * 0.30f, h * 0.50f, w * 0.68f, h * 0.50f, linePaint);
-                      c.drawLine(w * 0.36f, h * 0.50f, w * 0.30f, h * 0.68f, linePaint);
-                      c.drawLine(w * 0.60f, h * 0.50f, w * 0.68f, h * 0.68f, linePaint);
-                      c.drawLine(w * 0.68f, h * 0.50f, w * 0.82f, h * 0.50f, linePaint);
-                  }
+              private void drawSitup(Canvas c, float w, float h) {
+                  drawHead(c, w * 0.35f, h * 0.44f, dp(11));
+                  c.drawLine(w * 0.40f, h * 0.48f, w * 0.56f, h * 0.62f, linePaint);
+                  c.drawLine(w * 0.56f, h * 0.62f, w * 0.72f, h * 0.62f, linePaint);
+                  c.drawLine(w * 0.56f, h * 0.62f, w * 0.70f, h * 0.78f, linePaint);
+                  c.drawLine(w * 0.72f, h * 0.62f, w * 0.82f, h * 0.54f, linePaint);
+              }
 
-                  private void drawLunge(Canvas c, float w, float h) {
-                      float x = w * 0.48f;
-                      drawHead(c, x, h * 0.24f, dp(13));
-                      c.drawLine(x, h * 0.30f, x, h * 0.52f, linePaint);
-                      c.drawLine(x, h * 0.38f, x - dp(34), h * 0.46f, linePaint);
-                      c.drawLine(x, h * 0.38f, x + dp(36), h * 0.42f, linePaint);
-                      c.drawLine(x, h * 0.52f, x - dp(42), h * 0.66f, linePaint);
-                      c.drawLine(x - dp(42), h * 0.66f, x - dp(42), h * 0.78f, linePaint);
-                      c.drawLine(x, h * 0.52f, x + dp(30), h * 0.58f, linePaint);
-                      c.drawLine(x + dp(30), h * 0.58f, x + dp(52), h * 0.74f, linePaint);
-                  }
+              private void drawJumpingJack(Canvas c, float w, float h) {
+                  float x = w * 0.50f;
+                  drawHead(c, x, h * 0.24f, dp(13));
+                  c.drawLine(x, h * 0.30f, x, h * 0.54f, linePaint);
+                  c.drawLine(x, h * 0.38f, x - dp(48), h * 0.22f, linePaint);
+                  c.drawLine(x, h * 0.38f, x + dp(48), h * 0.22f, linePaint);
+                  c.drawLine(x, h * 0.54f, x - dp(42), h * 0.76f, linePaint);
+                  c.drawLine(x, h * 0.54f, x + dp(42), h * 0.76f, linePaint);
+              }
 
-                  private void drawPlank(Canvas c, float w, float h) {
-                      drawHead(c, w * 0.22f, h * 0.46f, dp(11));
-                      c.drawLine(w * 0.28f, h * 0.46f, w * 0.72f, h * 0.54f, linePaint);
-                      c.drawLine(w * 0.36f, h * 0.48f, w * 0.30f, h * 0.66f, linePaint);
-                      c.drawLine(w * 0.66f, h * 0.53f, w * 0.76f, h * 0.70f, linePaint);
-                  }
+              private void drawDone(Canvas c, float w, float h) {
+                  c.drawLine(w * 0.30f, h * 0.56f, w * 0.45f, h * 0.70f, linePaint);
+                  c.drawLine(w * 0.45f, h * 0.70f, w * 0.72f, h * 0.36f, linePaint);
+              }
 
-                  private void drawDeadlift(Canvas c, float w, float h) {
-                      float x = w * 0.50f;
-                      drawHead(c, x, h * 0.28f, dp(13));
-                      c.drawLine(x, h * 0.34f, x, h * 0.54f, linePaint);
-                      c.drawLine(x, h * 0.42f, x - dp(34), h * 0.58f, linePaint);
-                      c.drawLine(x, h * 0.42f, x + dp(34), h * 0.58f, linePaint);
-                      c.drawLine(x, h * 0.54f, x - dp(20), h * 0.72f, linePaint);
-                      c.drawLine(x, h * 0.54f, x + dp(18), h * 0.72f, linePaint);
-                      c.drawLine(w * 0.28f, h * 0.62f, w * 0.72f, h * 0.62f, linePaint);
-                      c.drawCircle(w * 0.22f, h * 0.62f, dp(10), linePaint);
-                      c.drawCircle(w * 0.78f, h * 0.62f, dp(10), linePaint);
-                  }
+              private void drawGeneric(Canvas c, float w, float h) {
+                  float x = w * 0.50f;
+                  drawHead(c, x, h * 0.24f, dp(13));
+                  c.drawLine(x, h * 0.30f, x, h * 0.56f, linePaint);
+                  c.drawLine(x, h * 0.40f, x - dp(34), h * 0.52f, linePaint);
+                  c.drawLine(x, h * 0.40f, x + dp(34), h * 0.52f, linePaint);
+                  c.drawLine(x, h * 0.56f, x - dp(26), h * 0.76f, linePaint);
+                  c.drawLine(x, h * 0.56f, x + dp(26), h * 0.76f, linePaint);
+              }
 
-                  private void drawPress(Canvas c, float w, float h) {
-                      float x = w * 0.50f;
-                      drawHead(c, x, h * 0.30f, dp(13));
-                      c.drawLine(x, h * 0.36f, x, h * 0.60f, linePaint);
-                      c.drawLine(x, h * 0.60f, x - dp(24), h * 0.76f, linePaint);
-                      c.drawLine(x, h * 0.60f, x + dp(24), h * 0.76f, linePaint);
-                      c.drawLine(x - dp(22), h * 0.42f, x - dp(22), h * 0.22f, linePaint);
-                      c.drawLine(x + dp(22), h * 0.42f, x + dp(22), h * 0.22f, linePaint);
-                      c.drawLine(x - dp(44), h * 0.22f, x + dp(44), h * 0.22f, linePaint);
-                  }
-
-                  private void drawSitup(Canvas c, float w, float h) {
-                      drawHead(c, w * 0.35f, h * 0.44f, dp(11));
-                      c.drawLine(w * 0.40f, h * 0.48f, w * 0.56f, h * 0.62f, linePaint);
-                      c.drawLine(w * 0.56f, h * 0.62f, w * 0.72f, h * 0.62f, linePaint);
-                      c.drawLine(w * 0.56f, h * 0.62f, w * 0.70f, h * 0.78f, linePaint);
-                      c.drawLine(w * 0.72f, h * 0.62f, w * 0.82f, h * 0.54f, linePaint);
-                  }
-
-                  private void drawJumpingJack(Canvas c, float w, float h) {
-                      float x = w * 0.50f;
-                      drawHead(c, x, h * 0.24f, dp(13));
-                      c.drawLine(x, h * 0.30f, x, h * 0.54f, linePaint);
-                      c.drawLine(x, h * 0.38f, x - dp(48), h * 0.22f, linePaint);
-                      c.drawLine(x, h * 0.38f, x + dp(48), h * 0.22f, linePaint);
-                      c.drawLine(x, h * 0.54f, x - dp(42), h * 0.76f, linePaint);
-                      c.drawLine(x, h * 0.54f, x + dp(42), h * 0.76f, linePaint);
-                  }
-
-                  private void drawDone(Canvas c, float w, float h) {
-                      c.drawLine(w * 0.30f, h * 0.56f, w * 0.45f, h * 0.70f, linePaint);
-                      c.drawLine(w * 0.45f, h * 0.70f, w * 0.72f, h * 0.36f, linePaint);
-                  }
-
-                  private void drawGeneric(Canvas c, float w, float h) {
-                      float x = w * 0.50f;
-                      drawHead(c, x, h * 0.24f, dp(13));
-                      c.drawLine(x, h * 0.30f, x, h * 0.56f, linePaint);
-                      c.drawLine(x, h * 0.40f, x - dp(34), h * 0.52f, linePaint);
-                      c.drawLine(x, h * 0.40f, x + dp(34), h * 0.52f, linePaint);
-                      c.drawLine(x, h * 0.56f, x - dp(26), h * 0.76f, linePaint);
-                      c.drawLine(x, h * 0.56f, x + dp(26), h * 0.76f, linePaint);
-                  }
+              private float dp(int value) {
+                  return value * getResources().getDisplayMetrics().density;
               }
           }
           EOF
@@ -1072,5 +1299,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SABAFIT-TIMER-APK
+          name: SABAFIT-TIMER-v3-APK
           path: app/build/outputs/apk/debug/app-debug.apk
