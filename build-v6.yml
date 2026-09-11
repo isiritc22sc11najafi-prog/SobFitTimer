@@ -1,0 +1,83 @@
+name: Build SABAHFIT TIMER V6
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - ".github/workflows/build-v6.yml"
+      - ".github/workflows/build-v5.yml"
+      - "referee's-whistle (2).mp3"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Install audio tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg unzip
+
+      - name: Recreate V5 project source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64
+
+          text = Path('.github/workflows/build-v5.yml').read_text(encoding='utf-8')
+          marker = "cat > project.b64 <<'EOF'"
+          if marker not in text:
+              raise SystemExit('Embedded V5 project was not found.')
+
+          block = text.split(marker, 1)[1]
+          block = block.split("\n          EOF", 1)[0]
+          payload = ''.join(line.strip() for line in block.splitlines() if line.strip())
+          Path('project.zip').write_bytes(base64.b64decode(payload))
+          PY
+
+          unzip -o project.zip
+          mkdir -p app/src/main/res/raw
+          mkdir -p app/src/main/res/drawable-nodpi
+          cp IMG_20260908_005331.jpg app/src/main/res/drawable-nodpi/sabahfit_logo.jpg
+
+      - name: Boost coach whistle for phone speakers
+        run: |
+          ffmpeg -y \
+            -i "referee's-whistle (2).mp3" \
+            -af "highpass=f=500,loudnorm=I=-9:TP=-0.5:LRA=3" \
+            -ar 44100 -ac 2 -b:a 192k \
+            app/src/main/res/raw/referee_whistle.mp3
+
+          echo "Amplified whistle analysis:"
+          ffmpeg -hide_banner -i app/src/main/res/raw/referee_whistle.mp3 \
+            -af volumedetect -f null - 2>&1 | grep -E "mean_volume|max_volume" || true
+
+      - name: Set V6 version
+        run: |
+          sed -i -E 's/versionCode[[:space:]]+[0-9]+/versionCode 6/' app/build.gradle
+          sed -i -E 's/versionName[[:space:]]+"[^"]+"/versionName "6.0"/' app/build.gradle
+          grep -E 'versionCode|versionName' app/build.gradle
+
+      - name: Build APK
+        run: gradle :app:assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SABAHFIT-TIMER-v6-LOUD-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
